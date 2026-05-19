@@ -75,6 +75,200 @@ export const COURSE = {
                     "Серые блоки «Пример» — код, который можно скопировать в RStudio.",
                     "Задания «Попробуйте» — вы вводите код у себя в консоли; на сайте — тренировка и подсказки.",
                     "Не торопитесь: лучше один урок за раз, чем всё за вечер.",
+                    "Уже работали в **Stata**? Сразу после этого урока откройте «Пришли из Stata» — там таблица соответствия команд.",
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "m0-l-stata",
+          title: "Пришли из Stata: те же задачи в R",
+          minutes: 25,
+          lecture: "Мост для тех, кто проходил лабораторные в Stata",
+          objectives: [
+            "Сопоставить привычные команды Stata с аналогами в R",
+            "Понять отличия синтаксиса (формулы, имена таблиц)",
+            "Повторить типовой цикл: данные → сводка → корреляция → регрессия",
+          ],
+          steps: [
+            {
+              type: "read",
+              title: "Зачем этот урок",
+              blocks: [
+                {
+                  kind: "p",
+                  text: "Если вы уже делали в Stata `summarize`, `correlate`, `reg` и импорт CSV — **эконометрическая логика та же**. Меняется только «язык» команд. Этот урок — шпаргалка-переводчик; дальше по курсу мы всё равно разберём R с нуля, но вы будете узнавать знакомые шаги.",
+                },
+                {
+                  kind: "note",
+                  text: "R **не копирует** Stata один в один: нет `.dta` «из коробки» без пакета haven, нет `esttab` в базе. Но для типовой курсовой (CSV, МНК, summary) базового R достаточно.",
+                },
+              ],
+            },
+            {
+              type: "read",
+              title: "Главная таблица: Stata → R",
+              blocks: [
+                {
+                  kind: "diagram",
+                  text:
+                    "Задача              │ Stata (пример)              │ R (база)\n" +
+                    "────────────────────┼─────────────────────────────┼──────────────────────────────\n" +
+                    "Рабочая таблица     │ одна «в памяти»             │ объект data.frame (имя сами)\n" +
+                    "Загрузить CSV       │ import delimited \"f.csv\"    │ dat <- read.csv(\"f.csv\")\n" +
+                    "Загрузить .dta      │ use \"f.dta\"                 │ haven::read_dta(\"f.dta\")\n" +
+                    "Список переменных   │ describe                    │ names(dat); str(dat)\n" +
+                    "Описательная        │ summarize                   │ summary(dat)\n" +
+                    "Корреляции          │ correlate x y               │ cor(dat[, c(\"x\",\"y\")])\n" +
+                    "Матрица corr        │ correlate, matrix           │ cor(dat)  (числ. столбцы)\n" +
+                    "Простая регрессия   │ reg y x                     │ lm(y ~ x, data = dat)\n" +
+                    "Несколько X         │ reg y x1 x2 x3              │ lm(y ~ x1 + x2 + x3, data=dat)\n" +
+                    "Константа           │ reg y x (есть _cons)        │ lm(y ~ x, data=dat) — β₀ есть\n" +
+                    "Без константы       │ reg y x, noconstant         │ lm(y ~ 0 + x, data=dat)\n" +
+                    "Таблица коэфф.      │ после reg — таблица         │ summary(m)\n" +
+                    "Прогноз             │ predict yhat, xb              │ predict(m, newdata=dat)\n" +
+                    "График y vs x       │ scatter y x                 │ plot(y ~ x, data = dat)\n" +
+                    "Диагностика         │ rvfplot и др.               │ plot(m)  (4 графика)\n" +
+                    "Подмножество        │ reg y x if region==1        │ lm(y ~ x, data=subset(dat, region==1))\n" +
+                    "Пропуски            │ reg y x if !missing(y)      │ lm(y ~ x, data=na.omit(dat))\n" +
+                    "Логарифм            │ gen lny = ln(y)             │ lm(log(y) ~ x, data=dat)\n" +
+                    "Сохранить результаты│ estimates store / esttab    │ saveRDS(m); пакеты stargazer, modelsummary",
+                },
+                {
+                  kind: "classroom",
+                  title: "На паре",
+                  text: "Попросите студентов назвать последнюю команду из Stata-лабы — найдите строку в таблице и запишите R-аналог в общий скрипт на проекторе.",
+                },
+              ],
+            },
+            {
+              type: "read",
+              title: "Три отличия, которые путают чаще всего",
+              blocks: [
+                {
+                  kind: "list",
+                  title: "1. Имя таблицы обязательно указывать",
+                  items: [
+                    "В Stata после `use` данные «просто есть».",
+                    "В R таблица — переменная: `dat <- read.csv(...)`. В `lm()` пишут `data = dat`.",
+                    "Опечатка в имени → **object not found**.",
+                  ],
+                },
+                {
+                  kind: "list",
+                  title: "2. Формула с тильдой ~",
+                  items: [
+                    "Stata: `reg wage educ exper` — переменные через пробел.",
+                    "R: `lm(wage ~ educ + exper, data = dat)` — зависимая **слева от ~**, остальные через **+**.",
+                    "Интеракция: `educ#exper` в Stata ≈ `educ:exper` или `educ * exper` в формуле R.",
+                  ],
+                },
+                {
+                  kind: "list",
+                  title: "3. Кавычки и слэши в путях",
+                  items: [
+                    "Путь к файлу в кавычках: `read.csv(\"C:/data/file.csv\")`.",
+                    "В Windows можно слэши `/` — R поймёт.",
+                    "Имена столбцов чувствительны к регистру: `Wage` и `wage` — разные столбцы.",
+                  ],
+                },
+              ],
+            },
+            {
+              type: "example",
+              title: "Типовой блок: как после import + summarize в Stata",
+              code:
+                '# Stata: import delimited "wages.csv", clear\n' +
+                "#         summarize\n" +
+                "# R:\n" +
+                'dat <- read.csv("wages.csv")\n' +
+                "summary(dat)\n" +
+                'cor(dat[, c("wage", "educ", "exper")])',
+              lines: [
+                {
+                  code: 'read.csv("wages.csv")',
+                  say: "Аналог import delimited. Файл должен лежать в рабочей папке (вкладка Files) или укажите полный путь.",
+                },
+                {
+                  code: "summary(dat)",
+                  say: "Как summarize: min, max, среднее, число NA по каждому столбцу.",
+                },
+                {
+                  code: 'cor(dat[, c("wage", "educ", "exper")])',
+                  say: "Как correlate для выбранных переменных. Можно и cor(dat) по всем числовым столбцам.",
+                },
+              ],
+            },
+            {
+              type: "example",
+              title: "Регрессия: reg → lm + summary",
+              code:
+                "# Stata:  reg wage educ exper, robust\n" +
+                "# R (базовая МНК):\n" +
+                "m <- lm(wage ~ educ + exper, data = dat)\n" +
+                "summary(m)",
+              lines: [
+                {
+                  code: "lm(wage ~ educ + exper, data = dat)",
+                  say: "Одна зависимая wage, два регрессора — как reg wage educ exper.",
+                },
+                {
+                  code: "summary(m)",
+                  say: "Коэффициенты, ст. ошибки, t, p-value, R² — читайте как таблицу после reg.",
+                },
+              ],
+              outputExplain:
+                "Робастные стандартные ошибки (как , robust в Stata) в базовом lm() нет — нужны пакеты sandwich + lmtest или fixest. На первых лабах обычно достаточно обычного summary(m).",
+            },
+            {
+              type: "quiz",
+              title: "Сопоставьте команду",
+              question: "В Stata вы написали: reg price income i.region. Что ближе всего в R (без пакетов)?",
+              options: [
+                { id: "a", label: "lm(price ~ income + region, data = dat)" },
+                { id: "b", label: "lm(price ~ income, data = dat)" },
+                { id: "c", label: "reg(price, income, region)" },
+              ],
+              correctId: "a",
+              explain:
+                "i.region в Stata — фиктивные переменные по region. В R категорию region подключают в формулу как + region (если factor) или через model.matrix; для курса чаще делают фиктивные столбцы вручную или as.factor(region).",
+            },
+            {
+              type: "practice",
+              title: "Запишите аналог reg",
+              instruction:
+                "В Stata была команда: reg consumption income. Таблица уже в объекте dat. Напишите оценку модели в R (присвойте модель переменной m).",
+              task: "m <- lm(consumption ~ income, data = dat)",
+              starter: "m <- lm(",
+              solution: "m <- lm(consumption ~ income, data = dat)",
+              checks: ["lm(", "consumption", "~", "income", "data", "dat"],
+              hints: [
+                "Шаблон: m <- lm(ЗАВИСИМАЯ ~ ОБЪЯСНЯЮЩАЯ, data = ИМЯ_ТАБЛИЦЫ)",
+                "Запятая перед data обязательна.",
+              ],
+            },
+            {
+              type: "read",
+              title: "Что пока не в базовом R (но есть в Stata)",
+              blocks: [
+                {
+                  kind: "list",
+                  items: [
+                    "**Панель / FE:** xtreg, reghdfe → пакеты plm, fixest",
+                    "**Инструменты:** ivregress → AER::ivreg",
+                    "**Кластерные SE:** vce(cluster id) → sandwich, fixest, lmtest",
+                    "**Красивые таблицы:** esttab → stargazer, modelsummary, fixest::etable",
+                    "**Файлы .dta:** use → install.packages(\"haven\"); library(haven); read_dta()",
+                  ],
+                },
+                {
+                  kind: "takeaway",
+                  items: [
+                    "Stata и R решают одни задачи; запомните lm(), summary(), read.csv(), cor().",
+                    "Дальше по курсу — установка RStudio и разбор синтаксиса R по шагам.",
+                    "Шпаргалку можно повторить в разделе 7 → «Шпаргалка команд».",
                   ],
                 },
               ],
@@ -965,14 +1159,19 @@ export const COURSE = {
                   kind: "list",
                   title: "Типовой pipeline",
                   items: [
-                    "dat <- read.csv(\"file.csv\") — загрузка",
-                    "summary(dat) — описательная статистика",
-                    "plot(y ~ x, data = dat) — график",
-                    "m <- lm(y ~ x1 + x2, data = dat) — оценка",
+                    "dat <- read.csv(\"file.csv\") — загрузка (Stata: import delimited)",
+                    "summary(dat) — описательная статистика (Stata: summarize)",
+                    "cor(dat) — корреляции (Stata: correlate)",
+                    "plot(y ~ x, data = dat) — график (Stata: scatter)",
+                    "m <- lm(y ~ x1 + x2, data = dat) — оценка (Stata: reg y x1 x2)",
                     "summary(m) — коэффициенты, p-value, R²",
                     "plot(m) — диагностика",
                     "confint(m) — доверительные интервалы",
                   ],
+                },
+                {
+                  kind: "note",
+                  text: "Полная таблица Stata ↔ R — в уроке «Пришли из Stata» (раздел 1).",
                 },
                 {
                   kind: "note",

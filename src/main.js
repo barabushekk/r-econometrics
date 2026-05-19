@@ -662,7 +662,10 @@ function buildHelpContent() {
     ["Environment", "Переменные и таблицы в памяти"],
     ["Files", "Рабочая папка, CSV"],
     ["Plots", "Графики регрессии"],
-    ["lm(y ~ x, data=)", "Оценка МНК"],
+    ["read.csv()", "CSV (Stata: import delimited)"],
+    ["summary()", "Сводка (Stata: summarize)"],
+    ["cor()", "Корреляции (Stata: correlate)"],
+    ["lm(y ~ x, data=)", "Регрессия (Stata: reg)"],
     ["summary(m)", "Таблица коэффициентов"],
   ];
 
