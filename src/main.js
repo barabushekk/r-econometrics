@@ -342,6 +342,12 @@ function renderBlocks(blocks) {
           ul,
         ]),
       );
+    } else if (b.kind === "diagram") {
+      frag.push(
+        el("pre", { className: "rstudio-diagram", "aria-label": "Схема окон RStudio" }, [
+          document.createTextNode(b.text),
+        ]),
+      );
     }
   }
   return frag;
@@ -624,12 +630,13 @@ function renderLesson() {
 
 function renderHelpPanel() {
   const items = [
-    ["Консоль", "Ввод команд, Enter — выполнить"],
-    ["<-", "Сохранить значение в переменную"],
-    ["data.frame", "Таблица: строки = наблюдения"],
+    ["Ctrl+Enter", "Выполнить строку из скрипта"],
+    ["Console", "Результат и ошибки"],
+    ["Environment", "Переменные и таблицы в памяти"],
+    ["Files", "Рабочая папка, CSV"],
+    ["Plots", "Графики регрессии"],
     ["lm(y ~ x, data=)", "Оценка МНК"],
-    ["summary(m)", "Коэффициенты, SE, p-value, R²"],
-    ["plot(m)", "Диагностические графики"],
+    ["summary(m)", "Таблица коэффициентов"],
   ];
 
   const dl = el("dl", { className: "glossary" });

@@ -746,6 +746,19 @@ body {
   font-size: 1.05rem;
 }
 
+.rstudio-diagram {
+  margin: 16px 0;
+  padding: 16px 18px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-x: auto;
+  color: var(--text);
+}
+
 .code-wrap {
   margin: 16px 0;
 }
