@@ -152,14 +152,25 @@ function closeOverlays() {
   state.actionsOpen = false;
 }
 
+function scrollLessonTop() {
+  requestAnimationFrame(() => {
+    const main = document.getElementById("main-content");
+    if (main) {
+      main.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else {
+      window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    }
+    main?.focus({ preventScroll: true });
+  });
+}
+
 function goToStep(lessonId, index) {
   state.activeLessonId = lessonId;
   state.stepIndex = index;
   closeOverlays();
   persist();
   render();
-  document.getElementById("main-content")?.focus({ preventScroll: true });
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  scrollLessonTop();
 }
 
 function nextStep() {
@@ -180,6 +191,7 @@ function nextStep() {
   }
   persist();
   render();
+  scrollLessonTop();
 }
 
 function prevStep() {
@@ -198,6 +210,7 @@ function prevStep() {
   }
   persist();
   render();
+  scrollLessonTop();
 }
 
 function resetProgress() {
