@@ -11,6 +11,8 @@ const defaultState = () => ({
   completedLessons: [],
   collapsedModules: {},
   sidebarOpen: false,
+  actionsOpen: false,
+  helpOpen: false,
   showInstructor: false,
   draft: {},
   hintLevel: {},
@@ -39,6 +41,7 @@ function persist() {
       completedLessons: state.completedLessons,
       collapsedModules: state.collapsedModules,
       showInstructor: state.showInstructor,
+      helpOpen: state.helpOpen,
     }),
   );
 }
@@ -139,13 +142,24 @@ function copyButton(text, label = "Скопировать код") {
   });
 }
 
+function syncBodyUiLock() {
+  const lock = state.sidebarOpen || state.actionsOpen;
+  document.body.classList.toggle("ui-locked", lock);
+}
+
+function closeOverlays() {
+  state.sidebarOpen = false;
+  state.actionsOpen = false;
+}
+
 function goToStep(lessonId, index) {
   state.activeLessonId = lessonId;
   state.stepIndex = index;
-  state.sidebarOpen = false;
+  closeOverlays();
   persist();
   render();
-  document.getElementById("main-content")?.focus();
+  document.getElementById("main-content")?.focus({ preventScroll: true });
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function nextStep() {
@@ -252,7 +266,7 @@ function renderOutline() {
         "aria-label": "Закрыть меню",
         text: "×",
         onClick: () => {
-          state.sidebarOpen = false;
+          closeOverlays();
           render();
         },
       }),
@@ -616,7 +630,7 @@ function renderLesson() {
     state.stepIndex === 0 ? renderLessonObjectives(lesson) : null,
     renderStepNav(lesson, stepIndex),
     el("article", { className: "lesson__body" }, [renderStepContent(step, lesson.id, stepIndex)]),
-    el("footer", { className: "lesson-foot" }, [
+    el("footer", { className: "lesson-foot lesson-foot--inline" }, [
       el("button", { type: "button", className: "btn btn--ghost", text: "← Назад", disabled: stepIndex === 0 && allLessons()[0].id === lesson.id, onClick: prevStep }),
       el("button", {
         type: "button",
@@ -628,7 +642,7 @@ function renderLesson() {
   ]);
 }
 
-function renderHelpPanel() {
+function buildHelpContent() {
   const items = [
     ["Ctrl+Enter", "Выполнить строку из скрипта"],
     ["Console", "Результат и ошибки"],
@@ -645,17 +659,16 @@ function renderHelpPanel() {
     dl.appendChild(el("dd", { text: dd }));
   }
 
-  const panel = el("aside", { className: "help-panel", "aria-label": "Справка" }, [
-    el("h3", { text: "Шпаргалка" }),
+  const parts = [
     dl,
     el("div", { className: "help-panel__links" }, [
       el("a", { href: "https://cran.r-project.org/", text: "Скачать R", target: "_blank", rel: "noopener" }),
       el("a", { href: "https://posit.co/download/rstudio-desktop/", text: "Скачать RStudio", target: "_blank", rel: "noopener" }),
     ]),
-  ]);
+  ];
 
   if (state.showInstructor) {
-    panel.appendChild(
+    parts.push(
       el("div", { className: "instructor-box" }, [
         el("h4", { text: "Режим преподавателя" }),
         el("p", { text: COURSE.forTeachers }),
@@ -663,29 +676,163 @@ function renderHelpPanel() {
       ]),
     );
   }
-  return panel;
+  return parts;
+}
+
+function renderHelpPanel() {
+  return el("aside", { className: "help-panel help-panel--desktop", "aria-label": "Справка" }, [
+    el("h3", { text: "Шпаргалка" }),
+    ...buildHelpContent(),
+  ]);
+}
+
+function renderHelpMobile() {
+  return el("details", { className: "help-mobile", open: state.helpOpen }, [
+    el("summary", {
+      className: "help-mobile__summary",
+      text: "Шпаргалка и ссылки",
+      onClick: (e) => {
+        e.preventDefault();
+        state.helpOpen = !state.helpOpen;
+        persist();
+        render();
+      },
+    }),
+    el("div", { className: "help-mobile__body" }, buildHelpContent()),
+  ]);
+}
+
+function renderActionSheet() {
+  if (!state.actionsOpen) return null;
+
+  const close = () => {
+    state.actionsOpen = false;
+    render();
+  };
+
+  return el("div", { className: "action-sheet", role: "dialog", "aria-label": "Меню" }, [
+    el("button", { type: "button", className: "backdrop", "aria-label": "Закрыть", onClick: close }),
+    el("div", { className: "action-sheet__panel" }, [
+      el("h3", { className: "action-sheet__title", text: "Настройки" }),
+      el("button", {
+        type: "button",
+        className: "action-sheet__item",
+        text: state.showInstructor ? "Скрыть подсказки преподавателю" : "Для преподавателя",
+        onClick: () => {
+          state.showInstructor = !state.showInstructor;
+          persist();
+          close();
+        },
+      }),
+      el("button", {
+        type: "button",
+        className: "action-sheet__item",
+        text: getTheme() === "dark" ? "Светлая тема" : "Тёмная тема",
+        onClick: () => {
+          setTheme(getTheme() === "dark" ? "light" : "dark");
+          close();
+        },
+      }),
+      el("button", {
+        type: "button",
+        className: "action-sheet__item",
+        text: "Печать урока",
+        onClick: () => {
+          close();
+          window.print();
+        },
+      }),
+      el("button", {
+        type: "button",
+        className: "action-sheet__item action-sheet__item--danger",
+        text: "Сбросить прогресс",
+        onClick: () => {
+          close();
+          resetProgress();
+        },
+      }),
+    ]),
+  ]);
+}
+
+function renderBottomBar() {
+  const found = findLesson(state.activeLessonId);
+  const lesson = found?.lesson;
+  const stepIndex = lesson ? Math.min(state.stepIndex, lesson.steps.length - 1) : 0;
+  const atStart = stepIndex === 0 && allLessons()[0]?.id === lesson?.id;
+
+  return el("nav", { className: "bottom-bar", "aria-label": "Быстрая навигация" }, [
+    el("button", {
+      type: "button",
+      className: "bottom-bar__btn",
+      text: "Содержание",
+      onClick: () => {
+        state.actionsOpen = false;
+        state.sidebarOpen = true;
+        render();
+      },
+    }),
+    el("button", {
+      type: "button",
+      className: "bottom-bar__btn",
+      text: "Назад",
+      disabled: atStart,
+      onClick: prevStep,
+    }),
+    el("button", {
+      type: "button",
+      className: "bottom-bar__btn bottom-bar__btn--primary",
+      text: "Дальше",
+      onClick: nextStep,
+    }),
+    el("button", {
+      type: "button",
+      className: "bottom-bar__btn",
+      text: state.helpOpen ? "Скрыть" : "Шпаргалка",
+      onClick: () => {
+        state.helpOpen = !state.helpOpen;
+        persist();
+        render();
+        requestAnimationFrame(() => {
+          document.querySelector(".help-mobile")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      },
+    }),
+  ]);
 }
 
 function renderHeader() {
   return el("header", { className: "header" }, [
     el("button", {
       type: "button",
-      className: "header__menu",
+      className: "header__icon-btn header__icon-btn--menu",
       "aria-label": "Открыть содержание",
       text: "☰",
       onClick: () => {
+        state.actionsOpen = false;
         state.sidebarOpen = true;
         render();
       },
     }),
     el("div", { className: "header__brand" }, [
       el("span", { className: "header__logo", text: "R" }),
-      el("div", {}, [
+      el("div", { className: "header__brand-text" }, [
         el("div", { className: "header__title", text: COURSE.title }),
         el("div", { className: "header__sub", text: "Путеводитель для занятий" }),
       ]),
     ]),
-    el("div", { className: "header__actions" }, [
+    el("button", {
+      type: "button",
+      className: "header__icon-btn header__icon-btn--more",
+      "aria-label": "Меню настроек",
+      text: "⋯",
+      onClick: () => {
+        state.sidebarOpen = false;
+        state.actionsOpen = !state.actionsOpen;
+        render();
+      },
+    }),
+    el("div", { className: "header__actions header__actions--desktop" }, [
       el("button", {
         type: "button",
         className: "btn btn--ghost btn--sm",
@@ -731,6 +878,7 @@ function render() {
   const app = document.getElementById("app");
   if (!state.seenWelcome) {
     app.replaceChildren(renderWelcome());
+    syncBodyUiLock();
     return;
   }
 
@@ -738,16 +886,31 @@ function render() {
     el("div", { className: "shell" }, [
       renderHeader(),
       el("div", { className: "shell__body" }, [
-        state.sidebarOpen ? el("button", { type: "button", className: "backdrop", "aria-label": "Закрыть", onClick: () => { state.sidebarOpen = false; render(); } }) : null,
+        state.sidebarOpen || state.actionsOpen
+          ? el("button", {
+              type: "button",
+              className: "backdrop",
+              "aria-label": "Закрыть меню",
+              onClick: () => {
+                closeOverlays();
+                render();
+              },
+            })
+          : null,
         renderOutline(),
-        renderLesson(),
+        el("div", { className: "shell__main" }, [renderLesson(), renderHelpMobile()]),
         renderHelpPanel(),
       ]),
+      renderActionSheet(),
+      renderBottomBar(),
       el("footer", { className: "site-foot" }, [
-        el("span", { text: "Материал для аудиторных занятий по эконометрике. Установите R и RStudio на свой компьютер." }),
+        el("span", {
+          text: "Материал для занятий по эконометрике. Код выполняется в RStudio на компьютере.",
+        }),
       ]),
     ]),
   );
+  syncBodyUiLock();
 }
 
 document.addEventListener("keydown", (e) => {
