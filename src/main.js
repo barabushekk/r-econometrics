@@ -1,4 +1,6 @@
 import { COURSE, STEP_TYPES, allLessons, findLesson, lessonProgress } from "./course.js";
+import { createRConsole, renderWebRHeaderChip } from "./r-console.js";
+import { ensureWebRInit, getWebRStatus, onWebRStatus } from "./webr-runtime.js";
 
 const STORAGE_KEY = "r-course-university-v1";
 const THEME_KEY = "r-course-theme";
@@ -17,6 +19,7 @@ const defaultState = () => ({
   draft: {},
   hintLevel: {},
   showSolution: {},
+  rConsoleOut: {},
 });
 
 let state = defaultState();
@@ -87,6 +90,22 @@ function formatText(text) {
 function stepKey(lessonId, index) {
   return `${lessonId}:${index}`;
 }
+
+function rConsoleKey(lessonId, index) {
+  return `r:${lessonId}:${index}`;
+}
+
+function updateWebRChip() {
+  const chip = document.getElementById("webr-chip");
+  if (!chip) return;
+  const st = getWebRStatus();
+  chip.className = `header__webr r-console__status r-console__status--${st.status}`;
+  chip.textContent = st.ready ? "WebR ✓" : st.loading ? "WebR …" : st.status === "error" ? "WebR !" : "";
+  chip.hidden = st.status === "idle";
+  chip.title = st.detail || st.error || "R в браузере";
+}
+
+onWebRStatus(updateWebRChip);
 
 function isStepDone(lessonId, index) {
   return (state.completedSteps[lessonId] ?? []).includes(index);
@@ -243,9 +262,10 @@ function renderWelcome() {
         el("p", { text: COURSE.forTeachers }),
       ]),
       el("ul", { className: "welcome__list" }, [
-        el("li", { text: "Шаги: теория → пример с копированием → практика в RStudio" }),
+        el("li", { text: "Шаги: теория → пример → практика. Код можно запустить в браузере (WebR) или в RStudio" }),
         el("li", { text: "Подсказки и образцы ответов — можно идти в своём темпе" }),
         el("li", { text: "Прогресс сохраняется в браузере (не нужен аккаунт)" }),
+        el("li", { text: "Первая загрузка WebR ~30–60 с — нужен интернет; на паре всё равно используйте RStudio" }),
       ]),
       el("button", {
         type: "button",
@@ -401,12 +421,17 @@ function renderTakeawayStep(step) {
   ]);
 }
 
-function renderExample(step) {
-  return el("div", { className: "step" }, [
+function renderExample(step, lessonId, stepIndex) {
+  const rKey = rConsoleKey(lessonId, stepIndex);
+  const stepEl = el("div", { className: "step" }, [
     stepTypeBadge("example"),
     el("h2", { className: "step__title", text: step.title }),
-    el("p", { className: "step__lead", text: "Скопируйте код в RStudio (скрипт или консоль). После каждой строки — Ctrl+Enter или Enter в консоли." }),
-    el("div", { className: "code-wrap" }, [
+    el("p", {
+      className: "step__lead",
+      text: "Запустите в браузере (WebR) или скопируйте в RStudio. Ctrl+Enter — выполнить в консоли ниже.",
+    }),
+    el("div", { className: "code-wrap code-wrap--ref" }, [
+      el("span", { className: "code-wrap__label", text: "Код урока" }),
       el("pre", { className: "code-box", tabIndex: "0" }, [document.createTextNode(step.code)]),
       copyButton(step.code),
     ]),
@@ -422,8 +447,8 @@ function renderExample(step) {
       : []),
     ...(step.output
       ? [
-          el("div", { className: "output-box" }, [
-            el("span", { className: "output-box__label", text: "Пример вывода R" }),
+          el("div", { className: "output-box output-box--static" }, [
+            el("span", { className: "output-box__label", text: "Ожидаемый вывод (справка)" }),
             el("pre", { className: "output-box__pre" }, [document.createTextNode(step.output)]),
             step.outputExplain
               ? el("p", { className: "output-box__hint", html: formatText(step.outputExplain) })
@@ -432,10 +457,25 @@ function renderExample(step) {
         ]
       : []),
   ]);
+
+  if (step.code?.trim()) {
+    stepEl.appendChild(
+      createRConsole({
+        initialCode: step.code,
+        saved: state.rConsoleOut[rKey],
+        onSave: (data) => {
+          state.rConsoleOut[rKey] = data;
+        },
+      }),
+    );
+  }
+
+  return stepEl;
 }
 
 function renderPractice(step, lessonId, stepIndex) {
   const draftKey = stepKey(lessonId, stepIndex);
+  const rKey = rConsoleKey(lessonId, stepIndex);
   const code = state.draft[draftKey] ?? step.starter ?? "";
   const hintIdx = state.hintLevel[draftKey] ?? 0;
   const showSol = state.showSolution[draftKey];
@@ -444,7 +484,7 @@ function renderPractice(step, lessonId, stepIndex) {
   ta.className = "practice-input";
   ta.rows = 5;
   ta.setAttribute("aria-label", "Поле для ввода кода");
-  ta.placeholder = "Введите код для самопроверки. Обязательно повторите в RStudio.";
+  ta.placeholder = "Введите код. Можно выполнить в браузере ниже или в RStudio.";
   ta.value = code;
   ta.spellcheck = false;
   ta.addEventListener("input", () => {
@@ -458,7 +498,7 @@ function renderPractice(step, lessonId, stepIndex) {
     hintBox.appendChild(el("p", { className: "hint-box__line", text: `Подсказка ${i + 1}: ${step.hints[i]}` }));
   }
 
-  return el("div", { className: "step" }, [
+  const stepEl = el("div", { className: "step step--practice" }, [
     stepTypeBadge("practice"),
     el("h2", { className: "step__title", text: step.title }),
     el("p", { className: "step__lead", html: formatText(step.instruction) }),
@@ -515,8 +555,25 @@ function renderPractice(step, lessonId, stepIndex) {
         },
       }),
     ]),
-    el("p", { className: "muted practice-note", text: "Не получается? Откройте ответ и нажмите «Дальше» — к уроку можно вернуться из меню слева." }),
+    el("p", {
+      className: "muted practice-note",
+      text: "Проверка на сайте — по тексту. Реальный запуск: кнопка «Выполнить» ниже или RStudio.",
+    }),
   ]);
+
+  stepEl.appendChild(
+    createRConsole({
+      compact: true,
+      initialCode: code || step.starter || "",
+      getCode: () => ta.value,
+      saved: state.rConsoleOut[rKey],
+      onSave: (data) => {
+        state.rConsoleOut[rKey] = data;
+      },
+    }),
+  );
+
+  return stepEl;
 }
 
 function renderQuiz(step, lessonId, stepIndex) {
@@ -566,7 +623,7 @@ function renderStepContent(step, lessonId, stepIndex) {
     case "read":
       return renderRead(step);
     case "example":
-      return renderExample(step);
+      return renderExample(step, lessonId, stepIndex);
     case "practice":
       return renderPractice(step, lessonId, stepIndex);
     case "quiz":
@@ -743,6 +800,17 @@ function renderActionSheet() {
       el("button", {
         type: "button",
         className: "action-sheet__item",
+        text: "Загрузить R в браузере (WebR)",
+        onClick: () => {
+          ensureWebRInit().finally(() => {
+            updateWebRChip();
+            close();
+          });
+        },
+      }),
+      el("button", {
+        type: "button",
+        className: "action-sheet__item",
         text: getTheme() === "dark" ? "Светлая тема" : "Тёмная тема",
         onClick: () => {
           setTheme(getTheme() === "dark" ? "light" : "dark");
@@ -818,6 +886,9 @@ function renderBottomBar() {
 }
 
 function renderHeader() {
+  const webrChip = renderWebRHeaderChip();
+  webrChip.id = "webr-chip";
+
   return el("header", { className: "header" }, [
     el("button", {
       type: "button",
@@ -837,6 +908,7 @@ function renderHeader() {
         el("div", { className: "header__sub", text: "Путеводитель для занятий" }),
       ]),
     ]),
+    webrChip,
     el("button", {
       type: "button",
       className: "header__icon-btn header__icon-btn--more",
@@ -921,12 +993,14 @@ function render() {
       renderBottomBar(),
       el("footer", { className: "site-foot" }, [
         el("span", {
-          text: "Материал для занятий по эконометрике. Код выполняется в RStudio на компьютере.",
+          text: "Эконометрика в R: WebR в браузере — для тренировки; на паре и в отчёте — RStudio на компьютере.",
         }),
       ]),
     ]),
   );
   syncBodyUiLock();
+  ensureWebRInit().catch(() => {});
+  requestAnimationFrame(updateWebRChip);
 }
 
 document.addEventListener("keydown", (e) => {
