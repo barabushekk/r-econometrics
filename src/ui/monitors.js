@@ -67,7 +67,7 @@ export class Monitors {
     g.strokeStyle = 'rgba(90,209,255,0.25)';
     g.lineWidth = 2;
     g.strokeRect(4, 4, w - 8, h - 8);
-    g.font = '600 18px "JetBrains Mono", ui-monospace, monospace';
+    g.font = '600 18px "IBM Plex Mono", ui-monospace, monospace';
     g.textBaseline = 'top';
   }
 
@@ -78,23 +78,23 @@ export class Monitors {
       g.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 30, 2);
     }
     g.fillStyle = RED;
-    g.font = '700 22px ui-monospace, monospace';
+    g.font = '700 22px "IBM Plex Mono", ui-monospace, monospace';
     g.fillText('ОТКАЗ ДАТЧИКОВ', 16, h - 34);
   }
 
   title(g, text, w) {
     g.fillStyle = DIM;
-    g.font = '700 15px ui-monospace, monospace';
+    g.font = '700 15px "IBM Plex Mono", ui-monospace, monospace';
     g.fillText(text, 14, 12);
     g.fillStyle = 'rgba(90,209,255,0.18)';
     g.fillRect(14, 32, w - 28, 1);
   }
 
   kv(g, x, y, k, v, color = CYAN) {
-    g.font = '500 14px ui-monospace, monospace';
+    g.font = '500 14px "IBM Plex Mono", ui-monospace, monospace';
     g.fillStyle = DIM;
     g.fillText(k, x, y);
-    g.font = '700 19px ui-monospace, monospace';
+    g.font = '700 19px "IBM Plex Mono", ui-monospace, monospace';
     g.fillStyle = color;
     g.fillText(v, x, y + 16);
   }
@@ -192,13 +192,13 @@ export class Monitors {
     g.arc(c2x + rho * k2, c2y - D.pos[3] * k2, 3.5, 0, Math.PI * 2);
     g.fill();
     g.fillStyle = DIM;
-    g.font = '500 12px ui-monospace, monospace';
+    g.font = '500 12px "IBM Plex Mono", ui-monospace, monospace';
     g.fillText('вид сбоку', bx + 4, by + 4);
     // подписи
     this.kv(g, bx, by + bh + 10, 'r (Бойер–Линдквист)', `${formatSci(r, 4)} M`);
     this.kv(g, bx, by + bh + 52, 'r / r₊', `${formatSci(r / sim.hz.rPlus, 4)}`, D.outside ? CYAN : RED);
     g.fillStyle = DIM;
-    g.font = '500 12px ui-monospace, monospace';
+    g.font = '500 12px "IBM Plex Mono", ui-monospace, monospace';
     g.fillText(`шкала: ${formatSci(viewR, 3)} M`, 14, h - 22);
     g.fillStyle = 'rgba(255,190,90,0.9)';
     g.fillText('ISCO', 160, h - 22);
@@ -212,16 +212,16 @@ export class Monitors {
     const D = ctx.derived;
     const S = ctx.sim.S;
     this.title(g, 'ХРОНОМЕТРИЯ', w);
-    g.font = '500 14px ui-monospace, monospace';
+    g.font = '500 14px "IBM Plex Mono", ui-monospace, monospace';
     g.fillStyle = DIM;
     g.fillText('СОБСТВЕННОЕ ВРЕМЯ КОРАБЛЯ τ', 14, 44);
-    g.font = '700 38px ui-monospace, monospace';
+    g.font = '700 38px "IBM Plex Mono", ui-monospace, monospace';
     g.fillStyle = CYAN;
     g.fillText(formatClock(D.tau * S.T), 14, 62);
-    g.font = '500 14px ui-monospace, monospace';
+    g.font = '500 14px "IBM Plex Mono", ui-monospace, monospace';
     g.fillStyle = DIM;
     g.fillText('ВРЕМЯ УДАЛЁННОГО НАБЛЮДАТЕЛЯ t (Б–Л)', 14, 112);
-    g.font = '700 30px ui-monospace, monospace';
+    g.font = '700 30px "IBM Plex Mono", ui-monospace, monospace';
     g.fillStyle = D.outside ? '#cfe9ff' : RED;
     g.fillText(D.outside ? formatClock(D.tBL * S.T) : '∞ — недостижимо', 14, 130);
     const col2 = w * 0.52;
@@ -284,14 +284,14 @@ export class Monitors {
     g.fillStyle = WARN;
     g.fillRect(yieldX, by - 4, 2, 22);
     g.fillStyle = DIM;
-    g.font = '500 13px ui-monospace, monospace';
+    g.font = '500 13px "IBM Plex Mono", ui-monospace, monospace';
     g.fillText(`σ = ${formatSci(st.stress / 1e6, 3)} МПа (${(100 * st.stressFrac).toFixed(st.stressFrac < 0.01 ? 4 : 1)}% предела)`, bx, by + 20);
     const x2 = w * 0.56;
     this.kv(g, x2, 44, 'λ растяжения', `${formatSci(D.lamStretch, 3)} с⁻²`);
     this.kv(g, x2, 90, 'Δa по длине корабля', `${formatSci(st.tidalAcrossShipG, 3)} g`, st.tidalAcrossShipG > 1 ? WARN : CYAN);
     this.kv(g, x2, 136, 'Δa голова–ноги', `${formatSci(st.tidalAcrossBodyG, 3)} g`, st.crewLevel >= 2 ? RED : CYAN);
     this.kv(g, x2, 182, 'экипаж', st.crew, ['#59e08a', WARN, RED, RED][st.crewLevel]);
-    g.font = '500 12px ui-monospace, monospace';
+    g.font = '500 12px "IBM Plex Mono", ui-monospace, monospace';
     let yy = 236;
     for (const s of st.systems) {
       g.fillStyle = s.ok ? GREEN : RED;
@@ -338,7 +338,7 @@ export class Monitors {
     g.beginPath();
     g.arc(cx + v[0] * rad, cy - v[1] * rad, 7, 0, Math.PI * 2);
     g.fill();
-    g.font = '500 12px ui-monospace, monospace';
+    g.font = '500 12px "IBM Plex Mono", ui-monospace, monospace';
     g.fillStyle = DIM;
     g.fillText(front ? 'впереди' : 'позади', 14, h - 22);
   }
