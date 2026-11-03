@@ -368,12 +368,13 @@ export class RenderPipeline {
     tm.uBlackout.value = view.blackout || 0;
     this.drawTo(this.toneMat, this.viewRT);
 
-    // пробник освещённости для кабины
-    if (this.frame % 8 === 0) {
+    // пробник освещённости для кабины: асинхронное чтение 4×4 через PBO
+    // (без остановки конвейера GPU)
+    this.pollProbe();
+    if (this.frame % 8 === 0 && !this._fence) {
       this.probeMat.uniforms.uSrc.value = this.viewRT.texture;
       this.drawTo(this.probeMat, this.probeRT);
-      r.readRenderTargetPixels(this.probeRT, 0, 0, 4, 4, this.probe);
-      this.probeReady = true;
+      this.requestProbe();
     }
 
     // сцена кабины
@@ -399,6 +400,36 @@ export class RenderPipeline {
     this.frame++;
   }
 }
+
+RenderPipeline.prototype.requestProbe = function () {
+  const gl = this.renderer.getContext();
+  if (!this._pbo) {
+    this._pbo = gl.createBuffer();
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this._pbo);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, 64, gl.STREAM_READ);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  }
+  this.renderer.setRenderTarget(this.probeRT);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this._pbo);
+  gl.readPixels(0, 0, 4, 4, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  this._fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  gl.flush();
+};
+
+RenderPipeline.prototype.pollProbe = function () {
+  if (!this._fence) return;
+  const gl = this.renderer.getContext();
+  const st = gl.clientWaitSync(this._fence, 0, 0);
+  if (st === gl.TIMEOUT_EXPIRED) return;
+  gl.deleteSync(this._fence);
+  this._fence = null;
+  if (st === gl.WAIT_FAILED) return;
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this._pbo);
+  gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.probe);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  this.probeReady = true;
+};
 
 function halton(i, b) {
   let f = 1;

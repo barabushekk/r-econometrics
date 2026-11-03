@@ -190,7 +190,12 @@ function startExperiment(opt) {
   restart();
   state.started = true;
   if (opt.mode === 'lab') panel.toggle(true);
-  canvas.requestPointerLock?.();
+  try {
+    const pl = canvas.requestPointerLock?.();
+    if (pl && pl.catch) pl.catch(() => {});
+  } catch (e) {
+    /* без захвата указателя: обзор перетаскиванием */
+  }
 }
 
 function setQuality(key) {

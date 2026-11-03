@@ -50,6 +50,7 @@ export class Hud {
         <div class="row"><span>Скорость отн. падающего с ∞</span><b data-k="vr"></b></div>
         <div class="row"><span>Собств. ускорение</span><b data-k="acc"></b></div>
         <div class="row"><span>Для зависания нужно</span><b data-k="hover"></b></div>
+        <div class="row"><span>Увлечение ИСО ω</span><b data-k="drag"></b></div>
       </div>
       <div class="hud-panel right">
         <h4>ВРЕМЯ</h4>
@@ -169,6 +170,10 @@ export class Hud {
     set('vr', `${formatSci(D.vRain, 4)} c`);
     set('acc', `${formatSci(D.thrustG, 3)} g${sim.drive().compensated ? ' (компенс.)' : ''}`);
     set('hover', D.outside ? (isFinite(D.hoverG) ? `${formatSci(D.hoverG, 3)} g` : 'невозможно') : 'невозможно', D.outside && isFinite(D.hoverG) && D.hoverG < 10 ? '' : 'warn');
+    set(
+      'drag',
+      sim.a === 0 ? '0 (нет вращения)' : isFinite(D.omegaDrag) && D.omegaDrag > 0 ? `${formatSci(D.omegaDrag / S.T, 3)} рад/с (оборот за ${formatDuration((2 * Math.PI * S.T) / D.omegaDrag)})` : '—',
+    );
     set('tau', formatClock(D.tau * S.T));
     set('tbl', D.outside ? formatClock(D.tBL * S.T) : '∞', D.outside ? '' : 'bad');
     set('dtdt', isFinite(D.dTauDt) ? formatSci(D.dTauDt, 5) : '—');

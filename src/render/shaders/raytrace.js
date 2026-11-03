@@ -154,7 +154,8 @@ float turbulence(vec3 x, float r, float phi, float tEmit) {
     float amp = 0.55;
     float fr = 1.0;
     for (int o = 0; o < NOISE_OCT; o++) {
-      vec3 P = vec3(q.xy * 7.0 * fr, lr * 9.0 * fr + zH * 0.35 * fr) + vec3(kk * 17.31, kk * 3.77, kk * 11.1);
+      // анизотропия: вытянутые по азимуту структуры (сдвиговое течение)
+      vec3 P = vec3(q.xy * 5.0 * fr, lr * 16.0 * fr + zH * 0.35 * fr) + vec3(kk * 17.31, kk * 3.77, kk * 11.1);
       n += amp * vnoise(P);
       fr *= 2.17;
       amp *= 0.5;
@@ -249,7 +250,7 @@ void main() {
             float taper = smoothstep(uRin, uRin * 1.06, rm) * (1.0 - smoothstep(uRout * 0.7, uRout, rm));
             float phi = atan(xm.y, xm.x);
             float turb = turbulence(xm, rm, phi, uDiskTime + tR + 0.5 * dtn);
-            float clump = exp(uTurb * turb * 1.8 - 0.5 * uTurb * uTurb);
+            float clump = exp(uTurb * turb * 2.6 - 0.5 * uTurb * uTurb);
             float dens = exp(-0.5 * zh * zh) * taper * clump;
             float kr = uTau0 / (H * 1.2533141) * dens;
             float ds = abs(h) * pu;
@@ -258,7 +259,7 @@ void main() {
               // вертикальная структура: серая атмосфера Эддингтона
               float tz = uTau0 * taper * clump * 0.5 * erfcApprox(abs(zh) * 0.70710678);
               // локальные флуктуации диссипации (горячие пятна МВН-турбулентности)
-              float dT = 1.0 + 0.12 * uTurb * turb;
+              float dT = 1.0 + 0.22 * uTurb * turb;
               float logT = diskLogTeff(rm) + 0.25 * log(0.75 * (tz + 0.6666667)) / log(10.0) + log(dT) / log(10.0);
               float logTobs = logT + log(g) / log(10.0);
               float wgt = trans * (1.0 - exp(-dtau));

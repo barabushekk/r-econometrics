@@ -159,7 +159,7 @@ vec3 thermal(float t) {
 }
 // расходящаяся шкала для log2 g: синий — синее смещение, красный — красное
 vec3 diverging(float lg) {
-  float t = clamp(lg / 2.0, -1.0, 1.0);
+  float t = clamp(lg / 1.2, -1.0, 1.0);
   vec3 neutral = vec3(0.92);
   vec3 blue = vec3(0.15, 0.45, 1.0);
   vec3 red = vec3(1.0, 0.25, 0.1);

@@ -267,6 +267,7 @@ export class Simulation {
     let alpha = NaN;
     let dTauDt = NaN;
     let hoverG = NaN;
+    let omegaDrag = NaN;
     let tBL = Infinity;
     let dtBLdtau = NaN;
     if (outside) {
@@ -277,6 +278,10 @@ export class Simulation {
         alpha = zamoLapse(r, cosT, a);
         dTauDt = alpha / gZ;
       }
+      // угловая скорость увлечения инерциальных систем ω = −g_tφ/g_φφ (рад/M)
+      const ephi = [0, -pos[2], pos[1], 0];
+      const gpp = dot4(g, ephi, ephi);
+      if (gpp > 1e-12) omegaDrag = -dot4(g, [1, 0, 0, 0], ephi) / gpp;
       dtBLdtau = u[0] - dKsMinusBLdr(r, a) * drdtau;
       tBL = pos[0] - ksMinusBLTime(r, a) - this.tBL0;
       // ускорение, необходимое для зависания (статический наблюдатель), вне эргосферы
@@ -379,6 +384,7 @@ export class Simulation {
       tau: this.tau,
       drdtau,
       hoverG,
+      omegaDrag,
       thrustG: this.thrustG,
       rxRatio,
       txRatio,

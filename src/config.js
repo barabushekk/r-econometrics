@@ -114,12 +114,13 @@ export const START_PRESETS = {
     kind: 'rest',
   },
   flyby: {
-    label: 'Пролёт: r = 80M, касательная скорость 0.16c',
-    r: 80,
-    thetaDeg: 84,
+    label: 'Гиперболический пролёт: r₀ = 150M, перицентр ≈ 10M',
+    r: 150,
+    thetaDeg: 70,
     phiDeg: 0,
-    kind: 'tangential',
-    v: 0.16,
+    kind: 'custom',
+    vr: -0.1155,
+    vph: 0.0327,
   },
   nearHorizon: {
     label: 'Свободное падение с покоя у r = 4M',

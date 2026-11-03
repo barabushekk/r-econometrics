@@ -49,20 +49,33 @@ export class Input {
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
 
-    element.addEventListener('mousedown', (e) => {
-      if (!this.enabled) return;
+    // Обзор: захват указателя; если он недоступен (iframe, запрет браузера) —
+    // перетаскивание с зажатой левой кнопкой.
+    this.dragging = false;
+    element.addEventListener('pointerdown', (e) => {
+      if (!this.enabled || e.pointerType !== 'mouse') return;
       if (e.button === 2) this.rmb = true;
-      if (!this.locked && e.button === 0 && !this.touchActive) element.requestPointerLock?.();
+      if (e.button === 0) this.dragging = true;
+      if (!this.locked && e.button === 0) {
+        try {
+          const p = element.requestPointerLock?.();
+          if (p && p.catch) p.catch(() => {});
+        } catch (err) {
+          /* захват недоступен — работает перетаскивание */
+        }
+      }
     });
-    window.addEventListener('mouseup', (e) => {
+    window.addEventListener('pointerup', (e) => {
+      if (e.pointerType !== 'mouse') return;
       if (e.button === 2) this.rmb = false;
+      if (e.button === 0) this.dragging = false;
     });
     element.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === element;
     });
     window.addEventListener('mousemove', (e) => {
-      if (!this.locked) return;
+      if (!this.locked && !this.dragging) return;
       this.mouseDX += e.movementX;
       this.mouseDY += e.movementY;
     });
