@@ -159,9 +159,10 @@ function resize() {
 }
 
 function applyDisk() {
+  // диск строится для работающей симуляции (масса и спин меняются только при перезапуске)
   const P = state.params;
-  const a = P.metric === 'kerr' ? P.spin : 0;
-  const prof = diskProfile({ massSolar: P.massSolar, a, eddRatio: P.disk.eddRatio, rOut: P.disk.rOut });
+  const a = sim.a;
+  const prof = diskProfile({ massSolar: sim.params.massSolar, a, eddRatio: P.disk.eddRatio, rOut: P.disk.rOut });
   pipeline.setDisk(prof, P.disk);
   state.diskInfo = { enabled: P.disk.enabled, rIn: prof.rIn, rOut: prof.rOut, Tmax: prof.Tmax };
 }
@@ -469,7 +470,7 @@ function frame(now) {
   // освещение кабины/корабля светом снаружи (по снимку изображения)
   updateExternalLight();
 
-  pipeline.adaptResolution(dtMs, settings.dynamicRes && state.mode !== 'cinematic');
+  pipeline.adaptResolution(dtMs, settings.dynamicRes);
   state.flash = Math.max(0, (state.flash || 0) - dt * 0.8);
   const endFade = sim.ended ? Math.min(0.85, (state.endFadeT = (state.endFadeT || 0) + dt * 0.25)) : (state.endFadeT = 0);
   pipeline.render(
@@ -652,6 +653,9 @@ function handleAction(a) {
     }
     case 'resetLook':
       rig.resetLook();
+      break;
+    case 'hudFull':
+      hud.el.classList.toggle('full');
       break;
     case 'escape':
       if (panel.open) panel.toggle(false);

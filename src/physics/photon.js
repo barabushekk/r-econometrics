@@ -129,6 +129,13 @@ export function tracePhoton(x0, pcov, a, opts = {}) {
     if (record) record.push([x[0], x[1], x[2]]);
     if (r < 0.02) return { status: 'captured', steps: i, x, p, pt, dt: t };
   }
+  // как в шейдере: луч, удаляющийся от фотонной области, считается ушедшим
+  const kf = new Float64Array(7);
+  photonDeriv(x, p, pt, a, kf);
+  const rl = ksGeometry(x[0], x[1], x[2], a, _G).r;
+  if (rl > 3.2 && x[0] * kf[0] + x[1] * kf[1] + x[2] * kf[2] > 0) {
+    return { status: 'escaped', dir: asymptoticDirection(p), steps: maxSteps, x, p, pt, dt: t, truncated: true };
+  }
   return { status: 'maxsteps', steps: maxSteps, x, p, pt, dt: t };
 }
 

@@ -47,6 +47,8 @@ html, body { margin: 0; height: 100%; background: #000; color: var(--fg); overfl
 .hud-log .bad { color: var(--bad); }
 .hud-cross { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 1px solid rgba(90, 209, 255, 0.35); border-radius: 50%; }
 .hud-hint { position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; color: var(--dim); font-size: 11px; opacity: 0.8; }
+.hud-compact { display: none; position: absolute; top: 98px; left: 12px; right: 12px; text-align: center; color: var(--fg); font-size: 11px; }
+.hud.minimal .hud-compact,
 .hud.minimal .hud-panel, .hud.minimal .hud-top, .hud.minimal .hud-hint, .hud.minimal .hud-cross, .hud.minimal .hud-log { display: none; }
 
 /* ---------- научная панель ---------- */
@@ -115,11 +117,17 @@ button.close { padding: 4px 10px; }
 .touch-ui .top-row { top: 46px; left: 50%; transform: translateX(-50%); }
 
 @media (max-width: 760px), (pointer: coarse) {
-  .hud-panel { width: 46%; font-size: 10px; padding: 6px 7px; top: 100px; }
+  .hud-compact { display: block; }
+  .hud:not(.full) .hud-panel { display: none; }
+  .hud-stage { padding: 8px 10px; }
+  .hud-stage h3 { font-size: 13px; }
+  .hud-stage p { font-size: 11.5px; }
+  .hud-panel { width: 46%; font-size: 10px; padding: 6px 7px; top: 120px; }
   .hud-panel .row { line-height: 1.35; }
   .hud-panel .row span { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hud-hint { display: none; }
-  .hud-stage { bottom: 170px; }
+  .hud-stage { bottom: auto; top: 118px; transform: translate(-50%, -6px); }
+  .hud-stage.show { transform: translate(-50%, 0); }
   .hud-log { bottom: 160px; max-width: 60%; }
   .hud-top { flex-wrap: wrap; font-size: 10px; gap: 4px 10px; }
 }

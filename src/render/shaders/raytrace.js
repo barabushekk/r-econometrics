@@ -57,6 +57,7 @@ uniform samplerCube uSky;
 uniform float uSkyScale;
 uniform float uSkyOn;
 uniform float uSkyGrid;
+uniform float uDebugFlatSky; // тестовый режим: ушедший луч = 1 (маска тени)
 uniform sampler2D uExposure;
 
 ${SPECTRUM}
@@ -186,12 +187,16 @@ void main() {
 
   vec3 k1x, k1p, k2x, k2p, k3x, k3p, k4x, k4p;
   float k1t, k2t, k3t, k4t;
+  float lastR = 1e9;
+  bool outward = false;
 
   for (int i = 0; i < MAX_STEPS; i++) {
     if (i >= uMaxSteps) break;
     float r = deriv(x, p, pt, k1x, k1p, k1t);
     float R = length(x);
     float speed = length(k1x);
+    lastR = r;
+    outward = dot(x, k1x) > 0.0;
     if (abs(r - uRPlus) < 0.2 && abs(k1t) > 30.0 * speed) { status = 2; break; }
     if (r < 0.02) { status = 2; break; }
     if (R > Resc && dot(x, k1x) > 0.0) { status = 1; escDir = normalize(p); break; }
@@ -273,6 +278,10 @@ void main() {
     if (trans < 0.002) { status = 3; break; }
   }
 
+  // Лимит шагов исчерпан, но луч уже удаляется от фотонной области:
+  // считаем его ушедшим (иначе тонкое фотонное кольцо «рвётся» на низком качестве)
+  if (status == 0 && outward && lastR > 3.2) { status = 1; escDir = normalize(p); }
+
   // Небо (звёзды и диффузный фон) по асимптотическому направлению
   float escaped = status == 1 ? 1.0 : 0.0;
   vec3 gx = dFdx(escDir);
@@ -290,6 +299,7 @@ void main() {
 
   col *= preE;
   sciLog *= preE;
+  if (uDebugFlatSky > 0.5) col = vec3(status == 1 ? 1.0 : 0.0);
   // координатная сетка небесной сферы (наглядное наложение, не физический эффект)
   float thG = acos(clamp(escDir.z, -1.0, 1.0));
   float phG = atan(escDir.y, escDir.x);

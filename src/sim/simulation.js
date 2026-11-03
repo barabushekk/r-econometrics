@@ -94,7 +94,7 @@ export class Simulation {
     this.destroyedTau = NaN;
     this.realTime = 0;
     this.predictTimer = 0;
-    this.predictor.start(this.y, this.a, this.hz.rPlus, this.rEnd);
+    this.predictor.start(this.y, this.a, this.hz.rPlus, this.rEnd, { startTau: 0 });
     this.derived = null;
     this.updateDerived();
     this.emit('start', `Старт: r = ${r0.toFixed(1)} M. ${start.label || ''}`);
@@ -196,9 +196,9 @@ export class Simulation {
 
     // прогноз
     this.predictTimer -= dt;
-    const done = this.predictor.step(300);
+    const done = this.predictor.step(150);
     if (done && this.predictTimer <= 0) {
-      this.predictor.start(this.y, this.a, this.hz.rPlus, this.rEnd);
+      this.predictor.start(this.y, this.a, this.hz.rPlus, this.rEnd, { startTau: this.tau });
       this.predictTimer = 0.6;
     }
   }
@@ -350,7 +350,14 @@ export class Simulation {
       }
     }
 
-    const pred = this.predictor.result;
+    const raw = this.predictor.result;
+    // прогноз считался от состояния в момент startTau — вычитаем прошедшее время
+    const since = this.tau - (raw.startTau ?? 0);
+    const pred = {
+      ...raw,
+      tauToHorizon: isFinite(raw.tauToHorizon) ? Math.max(0, raw.tauToHorizon - since) : raw.tauToHorizon,
+      tauToEnd: isFinite(raw.tauToEnd) ? Math.max(0, raw.tauToEnd - since) : raw.tauToEnd,
+    };
     this.derived = {
       pos,
       u,

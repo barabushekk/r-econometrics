@@ -113,6 +113,7 @@ export class RenderPipeline {
       uSkyScale: { value: 1 / SKY_SCALE },
       uSkyOn: { value: 1 },
       uSkyGrid: { value: 0 },
+      uDebugFlatSky: { value: 0 },
       uExposure: { value: this.expA.texture },
       uSpec: { value: this.specTex },
     };

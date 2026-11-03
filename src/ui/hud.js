@@ -5,7 +5,7 @@ import { formatClock, formatDuration, formatDistance, formatSci } from '../physi
 const STAGES = {
   1: [
     'Этап 1 · Дальний подход',
-    'Чёрная дыра выглядит небольшим тёмным пятном: тень почти не искажает звёзды вокруг. Угловой радиус тени для далёкого наблюдателя ≈ 3√3·GM/(c²·r). Используйте ускорение времени ( . / , ) — свободное падение отсюда занимает сутки.',
+    'Чёрная дыра выглядит небольшим тёмным пятном: тень почти не искажает звёзды вокруг. Угловой радиус тени для далёкого наблюдателя ≈ 3√3·GM/(c²·r). Используйте ускорение времени ( . / , ) — свободное падение отсюда занимает сутки. Звёзды рядом с ярким диском глаз не различит (яркость поверхности диска сравнима с солнечной): клавиша X — экспозиция «по фону», B — научный режим, Tab — можно отключить диск.',
   ],
   2: [
     'Этап 2 · Гравитационное линзирование',
@@ -37,6 +37,7 @@ export class Hud {
         <div class="hud-perf" data-k="perf"></div>
       </div>
       <div class="hud-warn" data-k="warn"></div>
+      <div class="hud-compact" data-k="compact"></div>
       <div class="hud-panel left">
         <h4>НАВИГАЦИЯ</h4>
         <div class="row"><span>Масса ЧД</span><b data-k="mass"></b></div>
@@ -71,7 +72,10 @@ export class Hud {
     `;
     root.appendChild(this.el);
     this.k = {};
-    for (const n of this.el.querySelectorAll('[data-k]')) this.k[n.dataset.k] = n;
+    for (const n of this.el.querySelectorAll('[data-k]')) {
+      this.k[n.dataset.k] = n;
+      n.dataset.base = n.className;
+    }
     this.timer = 0;
     this.stageTimer = 0;
     this.visible = true;
@@ -140,7 +144,8 @@ export class Hud {
       const n = this.k[k];
       if (!n) return;
       if (n.textContent !== v) n.textContent = v;
-      n.className = cls || (n.classList.contains('sub') ? 'sub' : '');
+      const c = [n.dataset.base, cls].filter(Boolean).join(' ');
+      if (n.className !== c) n.className = c;
     };
     set('mode', modeLabel);
     set('band', ['Видимый свет', 'ИК 1–5 мкм', 'Научный (g)'][settings.band]);
@@ -181,6 +186,10 @@ export class Hud {
     set('stress', `${formatSci(st.stress / 1e6, 3)} МПа (${formatSci(100 * st.stressFrac, 3)}%)`, st.stressFrac > 0.8 ? 'bad' : st.stressFrac > 0.3 ? 'warn' : '');
     set('integ', st.destroyed ? 'РАЗРУШЕН' : `${(100 * st.integrity).toFixed(1)}%`, st.destroyed ? 'bad' : st.integrity < 1 ? 'warn' : '');
     set('crew', st.crew, ['', 'warn', 'bad', 'bad'][st.crewLevel]);
+    set(
+      'compact',
+      `r ${formatSci(D.r, 3)}M · v ${formatSci(isFinite(D.vZamo) ? D.vZamo : D.vRain, 3)}c · τ ${formatClock(D.tau * S.T)} · t ${D.outside ? formatClock(D.tBL * S.T) : '∞'} · приливы ${formatSci(st.tidalAcrossShipG, 2)}g · корпус ${st.destroyed ? '✕' : (100 * st.integrity).toFixed(0) + '%'}`,
+    );
 
     const warns = [];
     if (!D.outside && !sim.ended) warns.push('ПОД ГОРИЗОНТОМ · ВОЗВРАТ НЕВОЗМОЖЕН');

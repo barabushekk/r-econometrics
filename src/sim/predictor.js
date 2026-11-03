@@ -15,6 +15,7 @@ export class Predictor {
   start(y, a, rPlus, rEnd, opts = {}) {
     const r0 = ksRadius(y[1], y[2], y[3], a);
     this.job = {
+      startTau: opts.startTau ?? 0,
       y: new Float64Array(y),
       a,
       rPlus,
@@ -66,6 +67,7 @@ export class Predictor {
       tauToEnd: status === 'end' ? J.tau : NaN,
       path: J.path,
       tauMax: J.tauMax,
+      startTau: J.startTau,
     };
     this.job = null;
     return true;
