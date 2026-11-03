@@ -1,14 +1,6 @@
-import { defineConfig } from "vite";
+import { defineConfig } from 'vite';
 
 export default defineConfig({
-  server: {
-    port: 5173,
-    open: true,
-  },
-  build: {
-    outDir: "dist",
-  },
-  optimizeDeps: {
-    exclude: ["webr"],
-  },
+  server: { port: 5173, open: true },
+  build: { outDir: 'dist', chunkSizeWarningLimit: 1200, target: 'es2020' },
 });
