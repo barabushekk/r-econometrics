@@ -1,6 +1,6 @@
 // Научная панель: параметры ЧД, диска, начальных условий, изображения.
 
-import { START_PRESETS, QUALITY } from '../config.js';
+import { START_PRESETS, QUALITY, EXPOSURE_MODES } from '../config.js';
 import { DRIVES } from '../sim/simulation.js';
 import { diskProfile } from '../physics/disk.js';
 import { horizons, iscoRadius } from '../physics/kerr.js';
@@ -77,7 +77,7 @@ export class SciencePanel {
         </div>
         <label>Двигатель <select data-p="drive">${dOpts}</select></label>
       </section>
-      <section>
+      <section data-section="image">
         <h3>Изображение</h3>
         <label>Диапазон <select data-p="band">
           <option value="0" ${s.settings.band === 0 ? 'selected' : ''}>Видимый свет (CIE 1931 → sRGB)</option>
@@ -85,10 +85,9 @@ export class SciencePanel {
           <option value="2" ${s.settings.band === 2 ? 'selected' : ''}>Научный: смещение частоты g</option>
         </select></label>
         <label>Экспозиция <select data-p="exposureMode">
-          <option value="0" ${s.settings.exposureMode === 0 ? 'selected' : ''}>Глаз (по ярким областям)</option>
-          <option value="1" ${s.settings.exposureMode === 1 ? 'selected' : ''}>По фону (видны звёзды)</option>
-          <option value="2" ${s.settings.exposureMode === 2 ? 'selected' : ''}>Ручная</option>
+          ${EXPOSURE_MODES.map((m, i) => `<option value="${i}" ${s.settings.exposureMode === i ? 'selected' : ''}>${m.label}</option>`).join('')}
         </select></label>
+        <label>Ночная адаптация (модель зрения): <b data-o="fusion"></b><input type="range" data-p="fusion" min="0" max="0.7" step="0.02" value="${s.settings.fusion}"></label>
         <label>Поправка: <b data-o="ev"></b><input type="range" data-p="ev" min="-8" max="8" step="0.5" value="${s.settings.ev}"></label>
         <label>Ручная экспозиция log₂E: <b data-o="man"></b><input type="range" data-p="manual" min="-10" max="40" step="0.5" value="${s.settings.manualLogE}"></label>
         <label>Ореол (рассеяние в глазу): <b data-o="bloom"></b><input type="range" data-p="bloom" min="0" max="0.12" step="0.005" value="${s.settings.bloom}"></label>
@@ -155,6 +154,7 @@ export class SciencePanel {
     o('ev', `${s.settings.ev > 0 ? '+' : ''}${s.settings.ev} EV`);
     o('man', `${s.settings.manualLogE}`);
     o('bloom', s.settings.bloom.toFixed(3));
+    o('fusion', (s.settings.fusion ?? 0).toFixed(2));
     o('fov', `${s.settings.fov}°`);
     o('sens', s.settings.sensitivity.toFixed(2));
     o('smooth', `${s.settings.smoothing.toFixed(2)} с`);

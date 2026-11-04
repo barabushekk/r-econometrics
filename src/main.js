@@ -3,7 +3,7 @@
 
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { QUALITY, DEFAULTS, START_PRESETS } from './config.js';
+import { QUALITY, DEFAULTS, START_PRESETS, EXPOSURE_MODES } from './config.js';
 import { RenderPipeline } from './render/pipeline.js';
 import { Simulation, FreeCamera, WARP_LEVELS } from './sim/simulation.js';
 import { diskProfile } from './physics/disk.js';
@@ -16,16 +16,18 @@ import { Monitors } from './ui/monitors.js';
 import { Hud } from './ui/hud.js';
 import { SciencePanel } from './ui/panel.js';
 import { Screens, MODES } from './ui/screens.js';
+import { PauseMenu } from './ui/menu.js';
 import { CabinAudio } from './audio/audio.js';
 
 const root = document.getElementById('app');
 const canvas = document.getElementById('view');
 
 // ---------------------------------------------------------------- настройки
-const SETTINGS_KEY = 'bh-sim-settings-v1';
+const SETTINGS_KEY = 'bh-sim-settings-v2';
 const settings = {
   band: DEFAULTS.band,
   exposureMode: DEFAULTS.exposureMode,
+  fusion: DEFAULTS.fusion,
   ev: DEFAULTS.ev,
   manualLogE: 30,
   bloom: DEFAULTS.bloom,
@@ -85,6 +87,8 @@ try {
 }
 if (!renderer.capabilities.isWebGL2) fatal('Требуется WebGL 2.');
 renderer.autoClear = false;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const gl = renderer.getContext();
 if (!gl.getExtension('EXT_color_buffer_float') && !gl.getExtension('EXT_color_buffer_half_float')) {
   console.warn('Нет EXT_color_buffer_float: HDR-рендеринг может быть недоступен');
@@ -103,9 +107,16 @@ const scene = new THREE.Scene();
 scene.add(cockpit.group);
 scene.add(exterior.group);
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+// окружение для отражений: в кабине — приглушённое «комнатное», снаружи — тёмный космос
+const envCabin = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const envSpace = pmrem.fromScene(makeSpaceEnv(), 0.02).texture;
+scene.environment = envCabin;
 const extLight = new THREE.DirectionalLight(0xffffff, 0);
 extLight.position.set(0, 0, -1);
+extLight.castShadow = true;
+extLight.shadow.mapSize.set(2048, 2048);
+extLight.shadow.bias = -0.0004;
+extLight.shadow.normalBias = 0.02;
 scene.add(extLight);
 scene.add(extLight.target);
 const extAmbient = new THREE.HemisphereLight(0xffffff, 0x000000, 0);
@@ -115,7 +126,8 @@ scene.traverse((o) => {
   if (o.material && 'envMapIntensity' in o.material) o.material.envMapIntensity = 0.35;
 });
 
-const hud = new Hud(root);
+const hud = new Hud(root, (a) => handleAction(a));
+const menu = new PauseMenu(root, (a) => handleMenu(a));
 hud.setVisible(settings.hud);
 const audio = new CabinAudio();
 const input = new Input(canvas);
@@ -141,6 +153,33 @@ applyDisk();
 resize();
 window.addEventListener('resize', resize);
 
+function makeSpaceEnv() {
+  // тёмная сфера с полосой Галактики: даёт металлу корпуса правдоподобные отражения
+  const env = new THREE.Scene();
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, 512, 256);
+  const grd = g.createLinearGradient(0, 70, 0, 190);
+  grd.addColorStop(0, 'rgba(0,0,0,0)');
+  grd.addColorStop(0.5, 'rgba(70,60,48,1)');
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 70, 512, 120);
+  for (let i = 0; i < 400; i++) {
+    g.fillStyle = `rgba(255,${200 + Math.random() * 55},${170 + Math.random() * 85},${Math.random()})`;
+    g.fillRect(Math.random() * 512, Math.random() * 256, 1, 1);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const sph = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide }));
+  sph.rotation.z = 0.5;
+  env.add(sph);
+  return env;
+}
+
 function fatal(msg) {
   const d = document.createElement('div');
   d.className = 'fatal';
@@ -165,6 +204,7 @@ function applyDisk() {
   const prof = diskProfile({ massSolar: sim.params.massSolar, a, eddRatio: P.disk.eddRatio, rOut: P.disk.rOut });
   pipeline.setDisk(prof, P.disk);
   state.diskInfo = { enabled: P.disk.enabled, rIn: prof.rIn, rOut: prof.rOut, Tmax: prof.Tmax };
+  sim.diskInfo = state.diskInfo;
 }
 
 function startExperiment(opt) {
@@ -287,6 +327,9 @@ function onPanelChange(p, v) {
       break;
     case 'exposureMode':
       settings.exposureMode = parseInt(v, 10);
+      break;
+    case 'fusion':
+      settings.fusion = v;
       break;
     case 'ev':
       settings.ev = v;
@@ -491,6 +534,7 @@ function frame(now) {
       diskTime,
       band: settings.band,
       exposureMode: settings.exposureMode,
+      fusion: settings.fusion,
       ev: settings.ev,
       manualLogE: settings.manualLogE,
       bloom: settings.bloom,
@@ -530,6 +574,7 @@ function frame(now) {
     });
   }
   exterior.update(dt, t, {
+    rcs: rcs / 3,
     thrust: sim.thrustG > 0 ? Math.min(1.5, 0.4 + Math.log10(1 + sim.thrustG) / 3) : 0,
     deform: st.plasticStrain,
     failures: { antenna: !st.systemOk('antenna'), radiators: !st.systemOk('radiators') },
@@ -549,46 +594,76 @@ function frame(now) {
     fps,
     resScale: pipeline.resScale,
     settings: { ...settings, qualityLabel: QUALITY[settings.quality].label },
-    modeLabel: `${MODES[state.mode].label}${state.freeFall && state.mode !== 'freefall' ? ' · двигатели выкл.' : ''}${state.cameraMode === 'free' ? ' · свободная камера' : state.cameraMode === 'external' ? ' · внешняя камера' : ''}`,
+    modeLabel: `${MODES[state.mode].label.toUpperCase()}${state.freeFall && state.mode !== 'freefall' ? ' · ДВИГ. ВЫКЛ' : ''}`,
+    camLabel: state.cameraMode === 'free' ? 'КАМЕРА-ЗОНД' : state.cameraMode === 'external' ? 'ВНЕШНЯЯ КАМЕРА' : 'КАБИНА',
+    camera: rig.camera,
+    cameraMode: state.cameraMode,
   });
 }
 
 function updateExternalLight() {
-  if (!pipeline.probeReady) return;
-  const px = pipeline.probe;
+  // 1) снимок изображения 4×4: цвет и рассеянная подсветка от того, что в кадре
   const cam = rig.camera;
   camRot.setFromMatrix4(cam.matrixWorld);
-  const dir = new THREE.Vector3();
-  const col = new THREE.Color(0, 0, 0);
-  let total = 0;
-  for (let j = 0; j < 4; j++)
-    for (let i = 0; i < 4; i++) {
-      const o = (j * 4 + i) * 4;
-      const r = px[o] / 255;
-      const g = px[o + 1] / 255;
-      const b = px[o + 2] / 255;
-      const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      tmpV.set(((i + 0.5) / 4) * 2 - 1, ((j + 0.5) / 4) * 2 - 1, 1).applyMatrix4(cam.projectionMatrixInverse).normalize().applyMatrix3(camRot);
-      dir.addScaledVector(tmpV, L);
-      col.r += r;
-      col.g += g;
-      col.b += b;
-      total += L;
-    }
-  const mean = total / 16;
-  if (total > 1e-4) dir.normalize();
-  else dir.set(0, 0, -1);
-  col.multiplyScalar(1 / 16);
-  const m = Math.max(col.r, col.g, col.b, 1e-4);
-  const hue = col.clone().multiplyScalar(1 / m);
-  const k = 0.15;
-  state.extColor = (state.extColor || new THREE.Color()).lerp(hue.clone().multiplyScalar(mean * 4), k);
+  const probeDir = new THREE.Vector3(0, 0, -1);
+  const col = new THREE.Color(1, 1, 1);
+  let mean = 0;
+  if (pipeline.probeReady) {
+    const px = pipeline.probe;
+    let total = 0;
+    col.setRGB(0, 0, 0);
+    probeDir.set(0, 0, 0);
+    for (let j = 0; j < 4; j++)
+      for (let i = 0; i < 4; i++) {
+        const o = (j * 4 + i) * 4;
+        const r = px[o] / 255;
+        const g = px[o + 1] / 255;
+        const b = px[o + 2] / 255;
+        const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        tmpV.set(((i + 0.5) / 4) * 2 - 1, ((j + 0.5) / 4) * 2 - 1, 1).applyMatrix4(cam.projectionMatrixInverse).normalize().applyMatrix3(camRot);
+        probeDir.addScaledVector(tmpV, L);
+        col.r += r;
+        col.g += g;
+        col.b += b;
+        total += L;
+      }
+    mean = total / 16;
+    if (total > 1e-4) probeDir.normalize();
+    else probeDir.set(0, 0, -1);
+    const m = Math.max(col.r, col.g, col.b, 1e-4);
+    col.multiplyScalar(1 / m);
+  }
+  // 2) основной свет — от диска, из видимого направления на ЧД.
+  //    Освещённость ∝ телесному углу диска ~ (r_диска/r)²; при экспозиции по
+  //    ярким областям сам диск ≈ белый, поэтому корпус с альбедо ~0.8 выглядит
+  //    ярким только вблизи диска.
+  const D = sim.derived;
+  const disk = state.diskInfo;
+  const dir = D.centerDir ? tmpV.set(D.centerDir[0], D.centerDir[1], D.centerDir[2]).clone() : probeDir.clone();
+  const omega = disk && disk.enabled ? Math.min(1.3, Math.pow(disk.rOut / Math.max(D.r, 1), 2)) : 0;
+  const k = 0.12;
+  state.extColor = (state.extColor || new THREE.Color()).lerp(col.clone().multiplyScalar(0.25 + mean * 4 + omega), k);
   state.extDir = (state.extDir || new THREE.Vector3(0, 0, -1)).lerp(dir, k).normalize();
-  extLight.color.copy(hue);
-  extLight.intensity += (mean * 9 - extLight.intensity) * k;
-  extLight.position.copy(state.extDir).multiplyScalar(10);
-  extAmbient.color.copy(hue);
-  extAmbient.intensity += (mean * 1.5 - extAmbient.intensity) * k;
+  extLight.color.copy(col).lerp(new THREE.Color(1, 0.97, 0.92), 0.5);
+  const target = Math.PI * (0.06 + 1.4 * omega) + mean * 3;
+  extLight.intensity += (target - extLight.intensity) * k;
+  const ext = state.cameraMode === 'external';
+  const S = ext ? 48 : 1.9;
+  const sc = extLight.shadow.camera;
+  if (sc.right !== S) {
+    sc.left = -S;
+    sc.right = S;
+    sc.top = S;
+    sc.bottom = -S;
+    sc.near = ext ? 1 : 0.05;
+    sc.far = ext ? 220 : 14;
+    sc.updateProjectionMatrix();
+  }
+  extLight.position.copy(state.extDir).multiplyScalar(ext ? 100 : 6);
+  extLight.target.position.set(0, 0, ext ? 4 : -0.3);
+  extAmbient.color.copy(col);
+  extAmbient.intensity += (0.05 + mean * 1.2 - extAmbient.intensity) * k;
+  scene.environment = ext ? envSpace : envCabin;
 }
 
 function handleAction(a) {
@@ -625,8 +700,8 @@ function handleAction(a) {
       saveSettings();
       break;
     case 'exposure':
-      settings.exposureMode = (settings.exposureMode + 1) % 3;
-      hud.log(['Экспозиция: глаз (по ярким областям)', 'Экспозиция: по фону — видны звёзды, диск пересвечен', 'Экспозиция: ручная'][settings.exposureMode]);
+      settings.exposureMode = (settings.exposureMode + 1) % EXPOSURE_MODES.length;
+      hud.log(`Экспозиция — ${EXPOSURE_MODES[settings.exposureMode].label}`);
       saveSettings();
       break;
     case 'grid':
@@ -662,11 +737,89 @@ function handleAction(a) {
     case 'hudFull':
       hud.el.classList.toggle('full');
       break;
+    case 'menu':
+      if (menu.open) closeMenu();
+      else openMenu();
+      break;
     case 'escape':
       if (panel.open) panel.toggle(false);
+      else if (!screens.help.classList.contains('hidden')) screens.toggleHelp(false);
+      else if (menu.open) {
+        // Esc, снявший захват указателя, мог уже открыть меню — не закрываем его сразу
+        if (performance.now() - (state.menuOpenedAt || 0) > 400) closeMenu();
+      } else if (state.started) openMenu();
       break;
   }
 }
+
+// ---------------------------------------------------------------- меню паузы
+let ownUnlock = false;
+function openMenu() {
+  if (menu.open || !state.started) return;
+  state.menuOpenedAt = performance.now();
+  state.pausedBeforeMenu = sim.paused;
+  sim.paused = true;
+  if (document.pointerLockElement) {
+    ownUnlock = true;
+    document.exitPointerLock?.();
+  }
+  const D = sim.derived;
+  menu.show(
+    `${MODES[state.mode].label} · ${state.params.start.label}. Сейчас: r = ${D.r.toPrecision(4)} M, τ = ${(sim.tau * sim.S.T).toFixed(1)} с по часам корабля${sim.ended ? ' · эксперимент завершён' : ''}.`,
+    settings.muted,
+  );
+}
+function closeMenu(relock = true) {
+  if (!menu.open) return;
+  menu.hide();
+  sim.paused = !!state.pausedBeforeMenu;
+  if (relock && !input.touchActive) {
+    try {
+      const pl = canvas.requestPointerLock?.();
+      if (pl && pl.catch) pl.catch(() => {});
+    } catch (e) {
+      /* обзор перетаскиванием */
+    }
+  }
+}
+function handleMenu(a) {
+  switch (a) {
+    case 'resume':
+      closeMenu();
+      break;
+    case 'restart':
+      closeMenu(true);
+      restart();
+      break;
+    case 'lab':
+    case 'settings':
+      closeMenu(false);
+      panel.toggle(true);
+      if (a === 'settings') panel.el.querySelector('[data-section=image]')?.scrollIntoView({ block: 'start' });
+      break;
+    case 'help':
+      closeMenu(false);
+      screens.toggleHelp(true);
+      break;
+    case 'mute':
+      handleAction('mute');
+      break;
+    case 'mainMenu':
+      closeMenu(false);
+      state.started = false;
+      screens.start.classList.remove('hidden');
+      break;
+  }
+}
+// потеря захвата указателя во время полёта (например, Esc) → меню
+document.addEventListener('pointerlockchange', () => {
+  if (document.pointerLockElement) return;
+  if (ownUnlock) {
+    ownUnlock = false;
+    return;
+  }
+  if (state.started && !menu.open && !panel.open && screens.help.classList.contains('hidden')) openMenu();
+});
 
 sim.setWarp(0);
 requestAnimationFrame(frame);
@@ -674,4 +827,4 @@ if (URLP.get('autostart')) {
   startExperiment({ mode: URLP.get('mode') || 'exploration', preset: URLP.get('preset') || 'far', quality: settings.quality, metric: URLP.get('metric') || 'kerr' });
 }
 window.__sim = sim; // для отладки из консоли
-window.__app = { state, settings, pipeline, startExperiment, setCameraMode, WARP_LEVELS };
+window.__app = { state, settings, pipeline, startExperiment, setCameraMode, WARP_LEVELS, rig };

@@ -9,7 +9,7 @@ export const QUALITY = {
     maxSteps: 220,
     stepScale: 0.11,
     noiseOctaves: 2,
-    skySize: 512,
+    skySize: 1024,
     resMin: 0.3,
     resMax: 0.6,
     resStart: 0.45,
@@ -71,7 +71,8 @@ export const DEFAULTS = {
     turbulence: 0.55,
   },
   band: 0, // 0 — видимый, 1 — ИК, 2 — научный
-  exposureMode: 0, // 0 — глаз, 1 — камера, 2 — ручная
+  exposureMode: 0, // см. EXPOSURE_MODES
+  fusion: 0.36, // вес ночной адаптации в режиме «Глаз»
   ev: 0,
   bloom: 0.035,
   skyGrid: false,
@@ -130,3 +131,11 @@ export const START_PRESETS = {
     kind: 'rest',
   },
 };
+
+/** Режимы экспозиции (порядок совпадает с uMode в шейдере экспозиции). */
+export const EXPOSURE_MODES = [
+  { short: 'глаз', label: 'Глаз: ночное + дневное зрение (видны и звёзды, и диск)' },
+  { short: 'камера', label: 'Камера: одна экспозиция по ярким областям' },
+  { short: 'по фону', label: 'По фону: одна экспозиция по небу (диск пересвечен)' },
+  { short: 'ручная', label: 'Ручная экспозиция' },
+];

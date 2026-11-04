@@ -297,6 +297,8 @@ export class Simulation {
     // радиосвязь: приём сигнала «сверху» вдоль главного изотропного направления
     const rxRatio = u[0] + G.l[0] * u[1] + G.l[1] * u[2] + G.l[2] * u[3];
     let txRatio = NaN;
+    // видимое направление на центр в осях корабля (для маркера на экране)
+    let centerDir = null;
     if (outside) {
       const R = Math.hypot(pos[1], pos[2], pos[3]);
       const n = [pos[1] / R, pos[2] / R, pos[3] / R];
@@ -310,7 +312,19 @@ export class Simulation {
         const kap = (-B + Math.sqrt(disc)) / (2 * A);
         const nuShip = u[0] - kap * (n[0] * u[1] + n[1] * u[2] + n[2] * u[3]);
         if (nuShip > 0) txRatio = 1 / nuShip;
+        // исходящий радиальный фотон k_μ = (−1, κn): приходит из направления −k_a
+        const kc = [-1, kap * n[0], kap * n[1], kap * n[2]];
+        const ka = e.map((ea) => kc[0] * ea[0] + kc[1] * ea[1] + kc[2] * ea[2] + kc[3] * ea[3]);
+        const kn = Math.hypot(...ka) || 1;
+        centerDir = ka.map((c) => -c / kn);
       }
+    }
+    if (!centerDir) {
+      const R = Math.hypot(pos[1], pos[2], pos[3]);
+      const V = [0, -pos[1] / R, -pos[2] / R, -pos[3] / R];
+      const va = e.map((ea) => dot4(g, ea, V));
+      const vn = Math.hypot(...va) || 1;
+      centerDir = va.map((c) => c / vn);
     }
 
     // приливный тензор в системе корабля
@@ -388,6 +402,7 @@ export class Simulation {
       thrustG: this.thrustG,
       rxRatio,
       txRatio,
+      centerDir,
       tidalVals: vals.map((v) => v / (S.T * S.T)),
       tidalVecs: eig.vectors,
       lamStretch,

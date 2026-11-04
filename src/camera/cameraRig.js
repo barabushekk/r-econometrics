@@ -14,7 +14,7 @@ export class CameraRig {
     this.camera.rotation.order = 'YXZ';
     this.mode = 'cockpit';
     this.head = { yaw: 0, pitch: 0, tyaw: 0, tpitch: 0 };
-    this.ext = { yaw: 0.6, pitch: 0.25, dist: 115, tyaw: 0.6, tpitch: 0.25, tdist: 115 };
+    this.ext = { yaw: 0.75, pitch: 0.22, dist: 82, tyaw: 0.75, tpitch: 0.22, tdist: 82 };
     this.free = { yaw: 0, pitch: 0, tyaw: 0, tpitch: 0 };
     this.smoothing = 0.06;
     this.eye = new THREE.Vector3(0, 0, 0);
@@ -57,7 +57,7 @@ export class CameraRig {
       S.tpitch = Math.max(-1.5, Math.min(1.5, S.tpitch));
     }
     if (this.mode === 'external' && input.wheel) {
-      this.ext.tdist = Math.max(70, Math.min(900, this.ext.tdist * Math.pow(1.12, input.wheel)));
+      this.ext.tdist = Math.max(45, Math.min(900, this.ext.tdist * Math.pow(1.12, input.wheel)));
     }
     const a = 1 - Math.exp(-dt / Math.max(this.smoothing, 1e-3));
     S.yaw += (S.tyaw - S.yaw) * a;

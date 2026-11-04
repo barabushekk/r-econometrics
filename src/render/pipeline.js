@@ -26,9 +26,13 @@ function fsMaterial(frag, uniforms) {
   });
 }
 
+// Тип HDR-буферов: float32, если поддерживаются рендеринг и фильтрация,
+// иначе half float (тогда яркость ограничивается 6·10⁴ в предэкспонированных единицах).
+let HDR_TYPE = THREE.HalfFloatType;
+
 function makeRT(w, h, opts = {}) {
   return new THREE.WebGLRenderTarget(w, h, {
-    type: THREE.HalfFloatType,
+    type: HDR_TYPE,
     format: THREE.RGBAFormat,
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
@@ -42,6 +46,10 @@ function makeRT(w, h, opts = {}) {
 export class RenderPipeline {
   constructor(renderer, quality) {
     this.renderer = renderer;
+    const ext = renderer.extensions;
+    const fullFloat = ext.has('EXT_color_buffer_float') && ext.has('OES_texture_float_linear');
+    HDR_TYPE = fullFloat ? THREE.FloatType : THREE.HalfFloatType;
+    this.hdrClamp = fullFloat ? 1e30 : 6e4;
     this.quality = quality;
     this.width = 1;
     this.height = 1;
@@ -71,9 +79,11 @@ export class RenderPipeline {
     this.diskTex.minFilter = this.diskTex.magFilter = THREE.NearestFilter;
     this.diskTex.needsUpdate = true;
 
-    this.expA = makeRT(1, 1, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
-    this.expB = makeRT(1, 1, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
-    this.lumRT = makeRT(256, 256, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+    const half = { type: THREE.HalfFloatType };
+    this.expA = makeRT(1, 1, { ...half, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+    this.expB = makeRT(1, 1, { ...half, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+    this.lumRT = makeRT(256, 256, { ...half, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+    this.lumDarkRT = makeRT(256, 256, { ...half, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
     this.probeRT = new THREE.WebGLRenderTarget(4, 4, { type: THREE.UnsignedByteType, depthBuffer: false });
 
     this.buildMaterials();
@@ -115,14 +125,16 @@ export class RenderPipeline {
       uSkyGrid: { value: 0 },
       uDebugFlatSky: { value: 0 },
       uExposure: { value: this.expA.texture },
+      uClampMax: { value: this.hdrClamp },
       uSpec: { value: this.specTex },
     };
     if (this.rtMat) this.rtMat.dispose();
     this.rtMat = fsMaterial(raytraceFrag({ maxSteps: q.maxSteps, noiseOctaves: q.noiseOctaves }), this.rtUniforms);
     this.accumMat = fsMaterial(ACCUM_FRAG, { uCur: { value: null }, uPrev: { value: null }, uAlpha: { value: 1 } });
-    this.lumMat = fsMaterial(LUM_FRAG, { uHdr: { value: null }, uBand: { value: 0 } });
+    this.lumMat = fsMaterial(LUM_FRAG, { uHdr: { value: null }, uExp: { value: null }, uBand: { value: 0 }, uPass: { value: 0 } });
     this.expMat = fsMaterial(EXPOSURE_FRAG, {
       uLum: { value: this.lumRT.texture },
+      uLumDark: { value: this.lumDarkRT.texture },
       uPrevExp: { value: null },
       uLodMax: { value: 8 },
       uMode: { value: 0 },
@@ -131,13 +143,14 @@ export class RenderPipeline {
       uRate: { value: 0.05 },
       uReset: { value: 1 },
     });
-    this.downMat = fsMaterial(DOWN_FRAG, { uSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uCap: { value: 6e4 } });
+    this.downMat = fsMaterial(DOWN_FRAG, { uSrc: { value: null }, uExp: { value: null }, uTexel: { value: new THREE.Vector2() }, uCap: { value: 0 } });
     this.upMat = fsMaterial(UP_FRAG, { uSrc: { value: null }, uBase: { value: null }, uTexel: { value: new THREE.Vector2() }, uMix: { value: 0.65 } });
     this.toneMat = fsMaterial(TONEMAP_FRAG, {
       uHdr: { value: null },
       uBloom: { value: null },
       uExposure: { value: null },
       uPrevExposure: { value: null },
+      uFusion: { value: 0.4 },
       uBloomI: { value: 0.035 },
       uBand: { value: 0 },
       uVignette: { value: 0.25 },
@@ -153,7 +166,7 @@ export class RenderPipeline {
     if (this.skyRT) this.skyRT.dispose();
     this.skyRT = new THREE.WebGLCubeRenderTarget(size, {
       type: THREE.HalfFloatType,
-      format: THREE.RGBAFormat,
+      format: THREE.RGFormat,
       generateMipmaps: true,
       minFilter: THREE.LinearMipmapLinearFilter,
       magFilter: THREE.LinearFilter,
@@ -161,10 +174,12 @@ export class RenderPipeline {
     });
     // Галактический полюс наклонён к оси вращения ЧД (ориентация произвольна)
     const pole = new THREE.Vector3(0.35, -0.5, 0.79).normalize();
+    const ref = new THREE.Vector3(1, 0, 0).sub(pole.clone().multiplyScalar(pole.x)).normalize();
     const mat = fsMaterial(skyFrag(), {
       uFace: { value: 0 },
       uSize: { value: size },
       uGalPole: { value: pole },
+      uGalRef: { value: ref },
       uSpec: { value: this.specTex },
     });
     const r = this.renderer;
@@ -230,8 +245,8 @@ export class RenderPipeline {
     if (!this.viewRT || this.viewRT.width !== W || this.viewRT.height !== H || this.sceneRT.samples !== msaa) {
       if (this.viewRT) this.viewRT.dispose();
       if (this.sceneRT) this.sceneRT.dispose();
-      this.viewRT = makeRT(W, H);
-      this.sceneRT = makeRT(W, H, { depthBuffer: true, samples: msaa });
+      this.viewRT = makeRT(W, H, { type: THREE.HalfFloatType });
+      this.sceneRT = makeRT(W, H, { type: THREE.HalfFloatType, depthBuffer: true, samples: msaa });
     }
   }
 
@@ -322,9 +337,14 @@ export class RenderPipeline {
     }
 
     // экспозиция
-    this.lumMat.uniforms.uHdr.value = hdr.texture;
-    this.lumMat.uniforms.uBand.value = view.band;
+    const lm = this.lumMat.uniforms;
+    lm.uHdr.value = hdr.texture;
+    lm.uExp.value = expRead.texture;
+    lm.uBand.value = view.band;
+    lm.uPass.value = 0;
     this.drawTo(this.lumMat, this.lumRT);
+    lm.uPass.value = 1;
+    this.drawTo(this.lumMat, this.lumDarkRT);
     const em = this.expMat.uniforms;
     em.uPrevExp.value = expRead.texture;
     em.uMode.value = view.exposureMode;
@@ -341,7 +361,8 @@ export class RenderPipeline {
       let src = hdr;
       for (const lvl of this.bloomLevels) {
         // ограничение яркости, питающей ореол (упрощение модели рассеяния в глазу)
-        this.downMat.uniforms.uCap.value = src === hdr ? 40 : 6e4;
+        this.downMat.uniforms.uCap.value = src === hdr ? 40 : 0;
+        this.downMat.uniforms.uExp.value = expRead.texture;
         this.downMat.uniforms.uSrc.value = src.texture;
         this.downMat.uniforms.uTexel.value.set(1 / src.width, 1 / src.height);
         this.drawTo(this.downMat, lvl);
@@ -365,6 +386,7 @@ export class RenderPipeline {
     tm.uExposure.value = expWrite.texture;
     tm.uPrevExposure.value = expRead.texture;
     tm.uBand.value = view.band;
+    tm.uFusion.value = view.exposureMode === 0 ? view.fusion ?? 0.4 : 0;
     tm.uBlackout.value = view.blackout || 0;
     this.drawTo(this.toneMat, this.viewRT);
 

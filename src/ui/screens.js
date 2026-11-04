@@ -19,8 +19,10 @@ export class Screens {
     const isTouch = matchMedia('(pointer: coarse)').matches;
     this.start.innerHTML = `
       <div class="card">
+        <span class="eyebrow">ИССЛЕДОВАТЕЛЬСКИЙ КОРАБЛЬ «ГОРИЗОНТ» · ЦЕНТР ГАЛАКТИКИ</span>
         <h1>Горизонт событий</h1>
-        <p class="lead">Интерактивная симуляция полёта к сверхмассивной чёрной дыре массой 4·10⁶ M☉ (как Sagittarius A*). Изображение получено трассировкой световых лучей в метрике Керра в реальном времени; корабль движется по уравнениям общей теории относительности.</p>
+        <p class="lead">Полёт к сверхмассивной чёрной дыре массой 4·10⁶ M☉ — как Sagittarius A*. Каждый пиксель — световой луч, рассчитанный в метрике Керра в реальном времени; корабль движется по уравнениям общей теории относительности.</p>
+        <div class="facts"><span>масса <b>4.0·10⁶ M☉</b></span><span>радиус горизонта <b>≈ 11.8 млн км</b></span><span>единица времени GM/c³ <b>19.7 с</b></span><span>до Земли <b>≈ 26 000 св. лет</b></span></div>
         <div class="modes">${Object.entries(MODES)
           .map(([k, m], i) => `<label class="mode"><input type="radio" name="mode" value="${k}" ${i === 0 ? 'checked' : ''}><b>${m.label}</b><span>${m.desc}</span></label>`)
           .join('')}</div>
@@ -102,8 +104,9 @@ const HELP_HTML = `<table class="keys">
 <tr><td>C</td><td>свободная камера-зонд</td></tr>
 <tr><td>T</td><td>двигатели вкл/выкл (свободное падение)</td></tr>
 <tr><td>B</td><td>диапазон: видимый / ИК / научный</td></tr>
-<tr><td>X</td><td>режим экспозиции</td></tr>
+<tr><td>X</td><td>экспозиция: глаз / камера / по фону / ручная</td></tr>
 <tr><td>G</td><td>координатная сетка неба</td></tr>
+<tr><td>Esc / «МЕНЮ»</td><td>меню паузы</td></tr>
 <tr><td>Tab</td><td>научная лаборатория (параметры)</td></tr>
 <tr><td>H / P / R</td><td>скрыть интерфейс / пауза / перезапуск</td></tr>
 <tr><td>\` (тильда)</td><td>качество Low → Ultra</td></tr>

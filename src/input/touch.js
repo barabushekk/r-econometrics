@@ -28,7 +28,7 @@ export function setupTouch(input, root, handlers) {
       <button data-act="warpDown">«</button>
       <button data-act="warpUp">»</button>
       <button data-act="band">λ</button>
-      <button data-act="panel">☰</button>
+      <button data-act="menu">☰</button>
       <button data-act="pause">❚❚</button>
       <button data-act="hudFull">i</button>
     </div>`;

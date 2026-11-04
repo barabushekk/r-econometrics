@@ -19,58 +19,91 @@ void main() {
 }
 `;
 
-// Логарифм яркости с центровзвешиванием → mip-цепочка → среднее
+// Статистика яркости (центровзвешенная) → mip-цепочка → средние по кадру.
+// Экспозиция хранится в 1×1 текстуре как log₂: (пред-экспозиция, ночная, дневная).
+// Проход 0: лог-среднее по освещённым пикселям и второй момент яркости в
+// «дневной» экспозиции; проход 1: лог-среднее по пикселям, не насыщенным в
+// «ночной» экспозиции (фон неба, звёзды).
 export const LUM_FRAG = /* glsl */ `
 ${PRECISION}
 in vec2 vUv;
 out vec4 outColor;
 uniform sampler2D uHdr;
+uniform sampler2D uExp;
 uniform int uBand;
+uniform int uPass;
 void main() {
   vec3 c = texture(uHdr, vUv).rgb;
   float L = uBand == 0 ? dot(c, vec3(0.2126, 0.7152, 0.0722)) : c.r;
+  vec4 e = texelFetch(uExp, ivec2(0, 0), 0);
+  float la = max(log2(max(L, 1e-37)) - e.r, -64.0); // абсолютный log₂ яркости
+  float lit = step(-58.0, la);                       // тень (нулевая яркость) не учитывается
   vec2 d = vUv - 0.5;
   float w = exp(-dot(d, d) * 6.0);
-  // второй момент яркости (с масштабом, чтобы не переполнить half float)
-  float Lc = min(L, 6e4) / 256.0;
-  outColor = vec4(w * log2(max(L, 1e-7)), w * Lc * Lc, w, 1.0);
+  if (uPass == 0) {
+    float Lh = min(exp2(la + e.b), 200.0) / 16.0;
+    outColor = vec4(w * lit * la, w * Lh * Lh, w, w * lit);
+  } else {
+    float Ll = exp2(la + e.g);
+    float wd = w * lit * (1.0 - smoothstep(1.0, 3.0, Ll));
+    outColor = vec4(wd * la, wd, 0.0, 1.0);
+  }
 }
 `;
 
-// Адаптация экспозиции (хранится log2 E в текстуре 1×1)
+// Адаптация экспозиции. Выход: (log₂E_пред, log₂E_ночн, log₂E_дневн).
+//  0 — «Глаз»: модель зрения с двумя адаптациями (слияние в тонмаппинге):
+//      дневная — по ярким областям, ночная — по фону; ночная ограничена
+//      пределом скотопической чувствительности;
+//  1 — «Камера»: одна экспозиция по ярким областям (физическая фотометрия);
+//  2 — «По фону»: одна экспозиция по фону неба (звёзды видны, диск пересвечен);
+//  3 — ручная.
 export const EXPOSURE_FRAG = /* glsl */ `
 ${PRECISION}
 in vec2 vUv;
 out vec4 outColor;
 uniform sampler2D uLum;
+uniform sampler2D uLumDark;
 uniform sampler2D uPrevExp;
 uniform float uLodMax;
-uniform int uMode;      // 0 — глаз (по светлым участкам), 1 — по фону (звёзды), 2 — ручная
-uniform float uEV;      // поправка экспозиции, ступени
-uniform float uManual;  // log2 E для ручного режима
-uniform float uRate;    // 1 − exp(−dt/τ)
+uniform int uMode;
+uniform float uEV;
+uniform float uManual;
+uniform float uRate;
 uniform float uReset;
 void main() {
   vec4 s = textureLod(uLum, vec2(0.5), uLodMax);
-  float prevLog = texelFetch(uPrevExp, ivec2(0, 0), 0).r;
+  vec4 sd = textureLod(uLumDark, vec2(0.5), uLodMax);
+  vec4 prev = texelFetch(uPrevExp, ivec2(0, 0), 0);
   float w = max(s.b, 1e-6);
-  // яркость в «предэкспонированных» единицах → абсолютная
-  float logAvg = s.r / w - prevLog;
-  // среднеквадратичная яркость (взвешивает светлые участки)
-  float logRms = 8.0 + 0.5 * log2(max(s.g / w, 1e-30)) - prevLog;
-  float tLog = log2(0.12) - logAvg;
+  float logAvg = s.a > 1e-5 ? s.r / s.a : -40.0;
+  float logRms = 4.0 + 0.5 * log2(max(s.g / w, 1e-30)) - prev.b;
+  float logDark = sd.g > 1e-4 ? sd.r / sd.g : logAvg;
   float tRms = log2(0.55) - logRms;
-  float target;
-  // «глаз»: адаптация к ярким участкам поля зрения (как дневное зрение рядом
-  // с ярким источником: слабые звёзды при этом не видны — это физика);
-  // «по фону»: адаптация к лог-средней яркости (звёзды видны, диск пересвечен).
-  // Сверху — предел ночной (скотопической) адаптации.
-  if (uMode == 0) target = min(min(tRms + 1.5, tLog), 36.0);
-  else if (uMode == 1) target = min(tLog, 36.0);
-  else target = uManual;
-  target = clamp(target + (uMode == 2 ? 0.0 : uEV), -30.0, 48.0);
-  float nl = uReset > 0.5 ? target : mix(prevLog, target, uRate);
-  outColor = vec4(nl, 0.0, 0.0, 1.0);
+  float tDark = log2(0.035) - logDark; // ночной ключ: тёмный фон остаётся тёмным
+  const float SCOTOPIC = 36.0; // предел ночной адаптации глаза
+  float lo;
+  float hi;
+  if (uMode == 0) {
+    hi = min(tRms + 1.0, SCOTOPIC);
+    lo = clamp(tDark, hi, SCOTOPIC);
+  } else if (uMode == 1) {
+    hi = min(tRms + 1.0, SCOTOPIC);
+    lo = hi;
+  } else if (uMode == 2) {
+    lo = min(tDark, SCOTOPIC);
+    hi = lo;
+  } else {
+    lo = uManual;
+    hi = uManual;
+  }
+  if (uMode != 3) {
+    lo += uEV;
+    hi += uEV;
+  }
+  vec2 tgt = clamp(vec2(lo, hi), -30.0, 48.0);
+  vec2 nv = uReset > 0.5 ? tgt : mix(prev.gb, tgt, uRate);
+  outColor = vec4(0.5 * (nv.x + nv.y), nv.x, nv.y, 1.0);
 }
 `;
 
@@ -80,10 +113,14 @@ ${PRECISION}
 in vec2 vUv;
 out vec4 outColor;
 uniform sampler2D uSrc;
+uniform sampler2D uExp;
 uniform vec2 uTexel;
-uniform float uCap;
-vec3 cap(vec3 c) { float m = max(max(c.r, c.g), max(c.b, 1e-6)); return c * min(1.0, uCap / m); }
+uniform float uCap; // в единицах «дневной» экспозиции; 0 — без ограничения
+float capV;
+vec3 cap(vec3 c) { float m = max(max(c.r, c.g), max(c.b, 1e-30)); return c * min(1.0, capV / m); }
 void main() {
+  vec4 ex = texelFetch(uExp, ivec2(0, 0), 0);
+  capV = uCap > 0.0 ? uCap * exp2(ex.r - ex.b) : 3.0e38;
   vec2 t = uTexel;
   vec3 a = texture(uSrc, vUv + t * vec2(-2, 2)).rgb;
   vec3 b = texture(uSrc, vUv + t * vec2(0, 2)).rgb;
@@ -131,6 +168,7 @@ uniform sampler2D uHdr;
 uniform sampler2D uBloom;
 uniform sampler2D uExposure;
 uniform float uBloomI;
+uniform float uFusion;
 uniform sampler2D uPrevExposure;
 uniform int uBand;
 uniform float uVignette;
@@ -168,21 +206,35 @@ vec3 diverging(float lg) {
 void main() {
   vec4 h = texture(uHdr, vUv);
   vec4 bl = texture(uBloom, vUv);
-  float curLog = texelFetch(uExposure, ivec2(0, 0), 0).r;
-  float k = exp2(curLog - texelFetch(uPrevExposure, ivec2(0, 0), 0).r);
-  h *= k;
-  bl *= k;
-  vec4 c = mix(h, bl, uBloomI);
+  vec4 e = texelFetch(uExposure, ivec2(0, 0), 0);
+  float pre = texelFetch(uPrevExposure, ivec2(0, 0), 0).r; // HDR записан с этой экспозицией
+  vec4 cHi = mix(h, bl, uBloomI) * exp2(e.b - pre);
+  vec4 cLo = h * exp2(e.g - pre);
+  // Слияние двух адаптаций (модель зрения): T = T_дн + w·T_ночн·(1 − T_дн).
+  // Функция монотонна по яркости, поэтому не создаёт ореолов.
+  float wf = (uFusion > 0.0 && e.g - e.b > 0.25) ? uFusion : 0.0;
+  // Ночная ветвь сохраняет цвет пикселя (оранжевый газ остаётся оранжевым,
+  // а не серым) и имеет логарифмическое «плечо» до уровня насыщения дневной
+  // экспозиции, чтобы слабые части диска сохраняли градации яркости.
+  float span = log2(1.0 + 4.0 * exp2(max(e.g - e.b, 0.0)));
   vec3 o;
   if (uBand == 0) {
-    o = aces(c.rgb);
+    vec3 tHi = aces(cHi.rgb);
+    float Ll = max(dot(cLo.rgb, vec3(0.2126, 0.7152, 0.0722)), 1e-30);
+    float tl = 0.5 * acesS(Ll) + 0.5 * clamp(log2(1.0 + Ll) / span, 0.0, 1.0);
+    vec3 chroma = cLo.rgb / Ll;
+    vec3 tLo = chroma * tl;
+    tLo /= max(1.0, max(tLo.r, max(tLo.g, tLo.b)));
+    tLo = mix(tLo, vec3(tl), 0.25 * smoothstep(0.6, 1.0, tl)); // лёгкое выцветание у самого белого
+    o = tHi + wf * tLo * (1.0 - tHi);
   } else if (uBand == 1) {
-    float v = acesS(c.r);
+    float v = acesS(cHi.r);
+    v = v + wf * (0.5 * acesS(cLo.r) + 0.5 * clamp(log2(1.0 + max(cLo.r, 0.0)) / span, 0.0, 1.0)) * (1.0 - v);
     o = thermal(pow(v, 0.8));
   } else {
-    float I = c.r;
-    float lg = c.g / max(c.r, 1e-9);
-    float v = acesS(I);
+    float lg = cHi.g / max(cHi.r, 1e-30);
+    float v = acesS(cHi.r);
+    v = v + wf * (0.5 * acesS(cLo.r) + 0.5 * clamp(log2(1.0 + max(cLo.r, 0.0)) / span, 0.0, 1.0)) * (1.0 - v);
     o = diverging(lg) * pow(v, 0.9);
   }
   vec2 d = vUv - 0.5;

@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { formatClock, formatDuration, formatDistance, formatSci } from '../physics/units.js';
+import { EXPOSURE_MODES } from '../config.js';
 
 const SIZES = { nav: [640, 400], time: [640, 400], struct: [640, 400], aux: [384, 256], disk: [384, 256] };
 const CYAN = '#5ad1ff';
@@ -306,7 +307,7 @@ export class Monitors {
     this.title(g, 'ДИАПАЗОН / ЭКСПОЗИЦИЯ', w);
     const bands = ['ВИДИМЫЙ (CIE 1931)', 'ИК 1–5 мкм (усл. цвета)', 'НАУЧНЫЙ: смещение g'];
     this.kv(g, 14, 44, 'режим', bands[ctx.band] || '');
-    this.kv(g, 14, 90, 'экспозиция', ['глаз', 'по фону', 'ручная'][ctx.exposureMode]);
+    this.kv(g, 14, 90, 'экспозиция', EXPOSURE_MODES[ctx.exposureMode].short);
     this.kv(g, 14, 136, 'ускорение времени', `×${formatSci(ctx.sim.effectiveWarp ?? ctx.sim.warp, 2)}${ctx.sim.warpLimited ? ' (огр.)' : ''}`, ctx.sim.warpLimited ? WARN : CYAN);
     this.kv(g, 14, 182, 'тяга', `${formatSci(ctx.sim.thrustG, 2)} g`);
   }

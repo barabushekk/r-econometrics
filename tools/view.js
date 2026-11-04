@@ -45,7 +45,7 @@ function frame() {
       rPlus: horizons(a).rPlus,
       diskTime: 0,
       band: num('band', 0),
-      exposureMode: P.get('flat') === '1' ? 2 : num('exp', 0),
+      exposureMode: P.get('flat') === '1' ? 3 : num('exp', 0),
       manualLogE: P.get('flat') === '1' ? 0 : 30,
       ev: 0,
       bloom: 0.035,

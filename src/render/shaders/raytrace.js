@@ -59,6 +59,7 @@ uniform float uSkyOn;
 uniform float uSkyGrid;
 uniform float uDebugFlatSky; // тестовый режим: ушедший луч = 1 (маска тени)
 uniform sampler2D uExposure;
+uniform float uClampMax;
 
 ${SPECTRUM}
 ${NOISE}
@@ -206,15 +207,17 @@ void main() {
     bool inSlab = false;
     if (uDiskOn > 0.5) {
       float rho = length(x.xy);
-      if (rho < uRout * 1.25 + 2.0) {
-        float zmax = 3.5 * uHr * max(r, uRin);
+      if (rho < uRout * 1.35 + 2.0) {
+        float zmax = 7.0 * uHr * max(r, uRin);
         float az = abs(x.z);
         float vz = k1x.z / speed;
         if (az > zmax) {
           if (x.z * vz < 0.0) hs = min(hs, (az - zmax) / max(abs(vz), 1e-4) + 0.25 * zmax);
         } else if (rho > uRin * 0.9) {
           inSlab = true;
-          hs = min(hs, 0.3 * uHr * r / max(abs(vz), 0.15));
+          // крупнее шаг в разреженных верхних слоях атмосферы диска
+          float zf = max(az / (uHr * max(r, uRin)) - 2.5, 0.0);
+          hs = min(hs, 0.3 * uHr * r * (1.0 + zf * zf) / max(abs(vz), 0.15));
         }
       }
     }
@@ -231,12 +234,12 @@ void main() {
     vec3 pn = p + (h / 6.0) * (k1p + 2.0 * k2p + 2.0 * k3p + k4p);
     float dtn = (h / 6.0) * (k1t + 2.0 * k2t + 2.0 * k3t + k4t);
 
-    if (inSlab || (uDiskOn > 0.5 && abs(xn.z) < 3.5 * uHr * max(r, uRin) && length(xn.xy) < uRout * 1.05)) {
+    if (inSlab || (uDiskOn > 0.5 && abs(xn.z) < 7.0 * uHr * max(r, uRin) && length(xn.xy) < uRout * 1.22)) {
       vec3 xm = 0.5 * (x + xn);
       vec3 pm = 0.5 * (p + pn);
       float fm; vec3 lm;
       float rm = ksBasic(xm, fm, lm);
-      if (rm > uRin && rm < uRout) {
+      if (rm > uRin && rm < uRout * 1.2) {
         float H = uHr * rm;
         float zh = xm.z / H;
         float Om = 1.0 / (rm * sqrt(rm) + uSpin);
@@ -247,11 +250,16 @@ void main() {
           float pu = ut * (pt + Om * (xm.x * pm.y - xm.y * pm.x));
           if (pu > 0.0) {
             float g = 1.0 / pu;
-            float taper = smoothstep(uRin, uRin * 1.06, rm) * (1.0 - smoothstep(uRout * 0.7, uRout, rm));
+            // внешний край: гауссов спад плотности (за r_out — до пренебрежимых значений,
+            // иначе обрыв был бы виден при ночной адаптации глаза)
+            float xo = max(rm - 0.85 * uRout, 0.0) / (0.06 * uRout);
+            float taper = smoothstep(uRin, uRin * 1.06, rm) * exp(-xo * xo);
             float phi = atan(xm.y, xm.x);
             float turb = turbulence(xm, rm, phi, uDiskTime + tR + 0.5 * dtn);
             float clump = exp(uTurb * turb * 2.6 - 0.5 * uTurb * uTurb);
-            float dens = exp(-0.5 * zh * zh) * taper * clump;
+            // плотность плавно обращается в ноль у границы расчётного слоя |z| = 4.5H
+            // гауссова атмосфера; у границы расчётного слоя (7H) плотность ~10⁻¹¹ — обрыв незаметен
+            float dens = exp(-0.5 * zh * zh) * taper * clump * (1.0 - smoothstep(6.0, 7.0, abs(zh)));
             float kr = uTau0 / (H * 1.2533141) * dens;
             float ds = abs(h) * pu;
             float dtau = kr * ds;
@@ -312,8 +320,8 @@ void main() {
     col += vec3(0.08, 0.25, 0.5) * line;
     if (uBand == 2) col.r += 0.3 * line;
   }
-  if (uBand == 2) outColor = vec4(min(col.r, 6e4), clamp(sciLog, -6e4, 6e4), 0.0, 1.0);
-  else outColor = vec4(min(col, vec3(6e4)), 1.0);
+  if (uBand == 2) outColor = vec4(min(col.r, uClampMax), clamp(sciLog, -uClampMax, uClampMax), 0.0, 1.0);
+  else outColor = vec4(min(col, vec3(uClampMax)), 1.0);
 }
 `;
 }
